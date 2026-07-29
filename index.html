@@ -1177,7 +1177,7 @@ async function syncNow(silent){
 
 /* ══ 상태 ══ */
 let S = { steps:{}, current:null, memos:{}, custom:[], customSteps:[] };
-let ui = { tab:"flow", step:PHASES[0].steps[0].id, recipe:RECIPES[0].id, detail:false, showProto:true, picErr:"", busy:false, editor:null, impErr:"", prepTarget:null, prepEdit:false };
+let ui = { tab:"flow", step:PHASES[0].steps[0].id, recipe:RECIPES[0].id, detail:false, showProto:true, picErr:"", busy:false, editor:null, impErr:"" };
 let pics = {};
 
 const blank = () => ({ status:"todo", date:"", result:"", trouble:[], photoN:0 });
@@ -1371,32 +1371,13 @@ async function importDoc(file){
   try{
     const lines = autoFormat(await readDoc(file));
     if(!lines.length) throw new Error("문서에서 글자를 찾지 못했습니다");
-    const ed = ui.editor || { id:null, phase:PHASES[0].id, name:"", note:"", text:"" };
-    ed.text = lines.join("\n");
+    const ed = ui.editor || { kind:"step", id:null, phase:PHASES[0].id, name:"", note:"", text:"" };
+    const add = lines.join("\n");
+    ed.text = ed.text && ed.text.trim() ? (ed.text.trim() + "\n" + add) : add;   // 이미 내용이 있으면 뒤에 붙인다
     if(!ed.name) ed.name = (file.name || "").replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").trim();
     ui.editor = ed;
   }catch(err){ ui.impErr = err.message || "파일을 읽지 못했습니다"; }
   ui.busy = false; render();
-}
-
-/* 제작·준비 탭: 문서를 새 항목으로 만들거나, 열려 있는 항목 뒤에 이어 붙인다 */
-async function importPrep(file){
-  ui.busy = true; ui.impErr = ""; render();
-  try{
-    const lines = autoFormat(await readDoc(file));
-    if(!lines.length) throw new Error("문서에서 글자를 찾지 못했습니다");
-    const body = lines.join("\n");
-    const nm = (file.name || "").replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").trim();
-    if(ui.prepTarget){
-      const c = S.custom.find(x => x.id === ui.prepTarget);
-      if(c){ c.body = c.body.trim() ? (c.body.trim() + "\n\n" + body) : body; ui.recipe = c.id; ui.prepEdit = false; }
-    }else{
-      const it = { id:"c"+Date.now(), name: nm || "새 항목", body };
-      S.custom.push(it); ui.recipe = it.id; ui.detail = true; ui.prepEdit = false;
-    }
-    save();
-  }catch(err){ ui.impErr = err.message || "파일을 읽지 못했습니다"; }
-  ui.busy = false; ui.prepTarget = null; render();
 }
 
 /* ══ 백업 ══ */
@@ -1454,10 +1435,11 @@ function syncTextarea(){
 const KEEP = /^[\[※(★]/;   // 소제목·부연·강조는 건드리지 않는다
 function editorView(){
   const e = ui.editor;
+  const prep = e.kind === "prep";
   const opts = PHASES.map(x => `<option value="${x.id}" ${e.phase===x.id?"selected":""}>${esc(x.label)}</option>`).join("")
     + `<option value="etc" ${e.phase==="etc"?"selected":""}>추가한 프로토콜 (별도 묶음)</option>`;
   return `<div class="detail">
-    <div class="dhead"><div class="dphase">${e.id?"프로토콜 편집":"프로토콜 추가"}</div>
+    <div class="dhead"><div class="dphase">${prep?"제작 · 준비":"실험 흐름"} · ${e.id?"편집":"추가"}</div>
       <h2>${e.id?esc(e.name||"이름 없음"):"문서에서 불러오기"}</h2>
       <p class="dnote">.hwpx · .docx · .txt 파일을 넣으면 내용을 줄 단위로 가져옵니다. 가져온 뒤 아래에서 고칠 수 있습니다.</p></div>
 
@@ -1470,12 +1452,12 @@ function editorView(){
       ${ui.impErr?`<p class="picerr">${esc(ui.impErr)}</p>`:""}
     </div>
 
-    <div class="field"><label for="ednm">단계 이름</label>
-      <input id="ednm" type="text" value="${esc(e.name)}" placeholder="예: Western blot" data-act="ed-name"></div>
-    <div class="field"><label for="ednt">한 줄 설명</label>
+    <div class="field"><label for="ednm">${prep?"항목 이름":"단계 이름"}</label>
+      <input id="ednm" type="text" value="${esc(e.name)}" placeholder="${prep?"예: 1X TAE buffer":"예: Western blot"}" data-act="ed-name"></div>
+    ${prep ? "" : `<div class="field"><label for="ednt">한 줄 설명</label>
       <input id="ednt" type="text" value="${esc(e.note)}" placeholder="예: 항체 반응 → 발색" data-act="ed-note"></div>
     <div class="field"><label for="edph">어느 묶음에 넣을까요</label>
-      <select id="edph" data-act="ed-phase">${opts}</select></div>
+      <select id="edph" data-act="ed-phase">${opts}</select></div>`}
 
     <div class="field"><label for="edtx">내용 — 한 줄에 한 항목</label>
       <textarea id="edtx" rows="14" placeholder="한 줄에 하나씩 적습니다." data-act="ed-text">${esc(e.text)}</textarea>
@@ -1500,13 +1482,13 @@ function editorView(){
     <div class="edrow">
       <button class="addbtn" data-act="ed-save">저장</button>
       <button class="delbtn" data-act="ed-cancel">취소</button>
-      ${e.id?`<button class="delbtn" data-act="ed-del">이 단계 삭제</button>`:""}
+      ${e.id?`<button class="delbtn" data-act="ed-del">${prep?"이 항목 삭제":"이 단계 삭제"}</button>`:""}
     </div>
   </div>`;
 }
 
 function viewFlow(){
-  if(ui.editor) return editorView();
+  if(ui.editor && ui.editor.kind !== "prep") return editorView();
   const steps = allSteps();
   const done = steps.filter(s => S.steps[s.id] && S.steps[s.id].status === "done").length;
   const pct  = steps.length ? Math.round(done / steps.length * 100) : 0;
@@ -1588,6 +1570,7 @@ function viewFlow(){
 }
 
 function viewPrep(){
+  if(ui.editor && ui.editor.kind === "prep") return editorView();
   const list = RECIPE_CATS.map(c => `<div class="group"><h2>${esc(c.label)}</h2>` +
       RECIPES.filter(r => r.cat === c.id).map(r =>
         `<button class="node ${ui.recipe===r.id?"on":""}" data-act="openr" data-id="${r.id}">
@@ -1595,8 +1578,7 @@ function viewPrep(){
     + `<div class="group"><h2>내가 추가한 것</h2>` + S.custom.map(c =>
         `<button class="node ${ui.recipe===c.id?"on":""}" data-act="openr" data-id="${c.id}">
           <span class="nm">${esc(c.name || "제목 없음")}</span></button>`).join("")
-    + `<button class="addnode" data-act="addcustom">+ 직접 추가</button>`
-    + `<button class="addnode" data-act="pfile">＋ 파일에서 추가</button></div>`;
+    + `<button class="addnode" data-act="addcustom">＋ 항목 추가 · 파일 불러오기</button></div>`;
 
   const cu = S.custom.find(c => c.id === ui.recipe);
   const r  = RECIPES.find(x => x.id === ui.recipe);
@@ -1605,26 +1587,13 @@ function viewPrep(){
     const clines = (cu.body || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
     detail = `<div class="detail">
       <div class="dhead"><div class="dtop"><div class="dphase">내가 추가한 것</div>
-        <div class="dtopbtns">
-          <button class="delbtn" data-act="pfile" data-id="${cu.id}">문서 이어붙이기</button>
-          <button class="delbtn" data-act="delcustom" data-id="${cu.id}">항목 삭제</button>
-        </div></div>
-        <input class="titlein" type="text" value="${esc(cu.name)}" placeholder="항목 이름 (예: 1X TAE buffer)" data-act="cname" data-id="${cu.id}"></div>
+        <button class="delbtn" data-act="prepedit" data-id="${cu.id}">편집 · 파일 불러오기</button></div>
+        <h2>${esc(cu.name || "제목 없음")}</h2></div>
       <div class="field">
-        <div class="frow"><label>만드는 법</label>
-          <button class="toggle" data-act="prepedit">${ui.prepEdit?"보기로 ▲":"편집 ✎"}</button></div>
-        ${ui.prepEdit
-          ? `<textarea id="cb" rows="14" placeholder="조성, 순서, 보관 조건, 재료 위치 등을 자유롭게 적으세요." data-act="cbody" data-id="${cu.id}">${esc(cu.body)}</textarea>
-             <div class="rule">
-               <b>[소제목]</b> 대괄호로 감싸면 구간 제목<br>
-               <b>- 항목</b> 앞에 - 를 붙이면 번호 없는 나열 (재료·조성)<br>
-               <b>(설명)</b> 또는 <b>※</b> 로 시작하면 번호 없는 부연<br>
-               <b>★</b> 로 시작하면 빨간 강조<br>
-               그 밖의 줄에는 순서 번호가 자동으로 붙습니다.
-             </div>`
-          : (clines.length
-              ? `<ol class="proto">${parseProtocol(clines).map(l=>`<li class="k-${l.k}">${esc(l.t)}</li>`).join("")}</ol>`
-              : `<p class="empty">내용이 없습니다. 「편집」을 누르거나 「문서 이어붙이기」로 파일을 넣으세요.</p>`)}
+        <span class="flabel">만드는 법</span>
+        ${clines.length
+          ? `<ol class="proto">${parseProtocol(clines).map(l=>`<li class="k-${l.k}">${esc(l.t)}</li>`).join("")}</ol>`
+          : `<p class="empty">내용이 없습니다. 위의 「편집 · 파일 불러오기」를 누르세요.</p>`}
       </div>
     </div>`;
   } else if(r){
@@ -1641,9 +1610,6 @@ function viewPrep(){
   } else detail = `<div class="detail"><p class="empty">왼쪽에서 항목을 고르세요.</p></div>`;
 
   return `<p class="dnote" style="margin:0 0 10px">실험 흐름과 별개로, 미리 만들어 두거나 그때그때 조성을 맞춰야 하는 것들입니다.</p>
-    <input type="file" id="pdocinput" accept=".hwpx,.docx,.txt,.md" style="display:none">
-    ${ui.busy?`<p class="dnote" style="margin:0 0 12px">문서 읽는 중…</p>`:""}
-    ${ui.impErr?`<p class="picerr" style="margin:0 0 12px">${esc(ui.impErr)}</p>`:""}
     <div class="split ${ui.detail?"detail-mode":""}">
       <div class="pane-list">${list}</div>
       <div class="pane-detail"><button class="backbtn" data-act="back">‹ 목록</button>${detail}</div>
@@ -1681,8 +1647,7 @@ document.getElementById("app").addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if(!b) return;
   const a = b.dataset.act, id = b.dataset.id;
   if(a === "open"){ ui.step = id; ui.detail = true; ui.picErr = ""; render(); window.scrollTo(0,0); }
-  else if(a === "openr"){ ui.recipe = id; ui.detail = true; ui.prepEdit = false; render(); window.scrollTo(0,0); }
-  else if(a === "prepedit"){ ui.prepEdit = !ui.prepEdit; render(); }
+  else if(a === "openr"){ ui.recipe = id; ui.detail = true; render(); window.scrollTo(0,0); }
   else if(a === "back"){ ui.detail = false; render(); }
   else if(a === "here"){ S.current = S.current === id ? null : id; save(); render(); }
   else if(a === "status"){ patch(id, { status:b.dataset.v }); }
@@ -1692,10 +1657,10 @@ document.getElementById("app").addEventListener("click", e => {
   else if(a === "pick"){ document.getElementById("picinput").click(); }
   else if(a === "delpic"){ savePics(ui.step, (pics[ui.step]||[]).filter(p => p.id !== id)); }
   else if(a === "zoom"){ const p = (pics[ui.step]||[]).find(x => x.id === id); if(p) lightbox(p); }
-  else if(a === "ed-new"){ ui.editor = { id:null, phase:PHASES[0].id, name:"", note:"", text:"" }; ui.impErr = ""; render(); window.scrollTo(0,0); }
+  else if(a === "ed-new"){ ui.editor = { kind:"step", id:null, phase:PHASES[0].id, name:"", note:"", text:"" }; ui.impErr = ""; render(); window.scrollTo(0,0); }
   else if(a === "ed-edit"){
     const c = S.customSteps.find(x => x.id === id);
-    if(c){ ui.editor = { id:c.id, phase:c.phase, name:c.name, note:c.note, text:(c.protocol||[]).join("\n") }; ui.impErr = ""; render(); window.scrollTo(0,0); }
+    if(c){ ui.editor = { kind:"step", id:c.id, phase:c.phase, name:c.name, note:c.note, text:(c.protocol||[]).join("\n") }; ui.impErr = ""; render(); window.scrollTo(0,0); }
   }
   else if(a === "ed-line"){
     if(!ui.editor) return;
@@ -1718,8 +1683,14 @@ document.getElementById("app").addEventListener("click", e => {
     syncTextarea();
   }
   else if(a === "ed-pick"){ document.getElementById("docinput").click(); }
-  else if(a === "ed-cancel"){ ui.editor = null; render(); }
+  else if(a === "ed-cancel"){ const wasPrep = ui.editor.kind === "prep"; ui.editor = null; if(wasPrep) ui.detail = !!ui.recipe; render(); }
   else if(a === "ed-del"){
+    if(ui.editor.kind === "prep"){
+      const cid = ui.editor.id;
+      S.custom = S.custom.filter(x => x.id !== cid);
+      ui.editor = null; ui.recipe = RECIPES[0].id; ui.detail = false;
+      save(); render(); return;
+    }
     const eid = ui.editor.id;
     S.customSteps = S.customSteps.filter(x => x.id !== eid);
     delete S.steps[eid];
@@ -1733,6 +1704,18 @@ document.getElementById("app").addEventListener("click", e => {
     const lines = ed.text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
     if(!ed.name.trim()){ ui.impErr = "단계 이름을 적어 주세요."; render(); return; }
     if(!lines.length){ ui.impErr = "내용이 비어 있습니다."; render(); return; }
+    if(ed.kind === "prep"){
+      const body = lines.join("\n");
+      if(ed.id){
+        const c = S.custom.find(x => x.id === ed.id);
+        if(c){ c.name = ed.name.trim(); c.body = body; ui.recipe = c.id; }
+      }else{
+        const it = { id:"c"+Date.now(), name:ed.name.trim(), body };
+        S.custom.push(it); ui.recipe = it.id;
+      }
+      ui.editor = null; ui.detail = true; ui.impErr = "";
+      save(); render(); return;
+    }
     if(ed.id){
       const c = S.customSteps.find(x => x.id === ed.id);
       Object.assign(c, { phase:ed.phase, name:ed.name.trim(), note:ed.note.trim(), protocol:lines });
@@ -1746,8 +1729,11 @@ document.getElementById("app").addEventListener("click", e => {
     ui.editor = null; ui.detail = true; ui.impErr = "";
     save(); render();
   }
-  else if(a === "pfile"){ ui.prepTarget = id || null; ui.impErr = ""; document.getElementById("pdocinput").click(); }
-  else if(a === "addcustom"){ const it = { id:"c"+Date.now(), name:"새 항목", body:"" }; S.custom.push(it); ui.recipe = it.id; ui.detail = true; ui.prepEdit = true; save(); render(); }
+  else if(a === "addcustom"){ ui.editor = { kind:"prep", id:null, phase:"", name:"", note:"", text:"" }; ui.impErr = ""; render(); window.scrollTo(0,0); }
+  else if(a === "prepedit"){
+    const c = S.custom.find(x => x.id === id);
+    if(c){ ui.editor = { kind:"prep", id:c.id, phase:"", name:c.name, note:"", text:c.body || "" }; ui.impErr = ""; render(); window.scrollTo(0,0); }
+  }
   else if(a === "delcustom"){ S.custom = S.custom.filter(c => c.id !== id); ui.recipe = RECIPES[0].id; save(); render(); }
 });
 
@@ -1756,8 +1742,6 @@ document.getElementById("app").addEventListener("input", e => {
   if(a === "date")   { S.steps[ui.step].date = t.value; save(); }
   else if(a === "result") { S.steps[ui.step].result = t.value; save(); }
   else if(a === "memo")   { S.memos[t.dataset.id] = t.value; save(); }
-  else if(a === "cname")  { const c = S.custom.find(x => x.id === t.dataset.id); if(c){ c.name = t.value; save(); } }
-  else if(a === "cbody")  { const c = S.custom.find(x => x.id === t.dataset.id); if(c){ c.body = t.value; save(); } }
   else if(a === "tr"){
     const tr = S.steps[ui.step].trouble.find(x => String(x.id) === t.dataset.id);
     if(tr){ tr[t.dataset.f] = t.value; save(); }
@@ -1775,11 +1759,6 @@ document.getElementById("app").addEventListener("input", e => {
 
 document.getElementById("app").addEventListener("change", e => {
   if(e.target.dataset.act === "ed-phase"){ ui.editor.phase = e.target.value; return; }
-  if(e.target.id === "pdocinput"){
-    const el = e.target, f = (el.files || [])[0];
-    if(f) importPrep(f).then(() => { el.value = ""; });
-    return;
-  }
   if(e.target.id === "docinput"){
     const el = e.target, f = (el.files || [])[0];
     if(f) importDoc(f).then(() => { el.value = ""; });
