@@ -179,6 +179,9 @@ select{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);b
 .dtopbtns{display:flex;gap:8px;flex-wrap:wrap}
 .edrow{display:flex;gap:10px;flex-wrap:wrap}
 .edrow .addbtn,.edrow .delbtn{min-height:var(--tap);padding:0 22px;font-size:15px}
+.btnpair{display:flex;gap:6px}
+.prevbox li[data-act]{cursor:pointer;border-radius:6px}
+.prevbox li[data-act]:active{background:#eef3f1}
 .prevbox{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:6px 12px;max-height:340px;overflow:auto}
 .prevbox:empty{display:none}
 .rule{margin-top:10px;padding:12px 14px;background:var(--paper);border:1px solid var(--line);border-radius:10px;font-size:13.5px;line-height:1.85;color:var(--ink-soft)}
@@ -1432,12 +1435,23 @@ function statusChips(id, cur){
 
 
 /* ══ 프로토콜 추가 · 편집 화면 ══ */
+function previewHTML(){
+  if(!ui.editor) return "";
+  const raw = (ui.editor.text || "").split(/\r?\n/);
+  const idx = [], lines = [];
+  raw.forEach((l, i) => { const t = l.trim(); if(t){ lines.push(t); idx.push(i); } });
+  return parseProtocol(lines).map((l, n) => `<li class="k-${l.k}" data-act="ed-line" data-i="${idx[n]}">${esc(l.t)}</li>`).join("");
+}
 function updatePreview(){
   const box = document.getElementById("edprev");
-  if(!box || !ui.editor) return;
-  const lines = ui.editor.text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-  box.innerHTML = parseProtocol(lines).map(l => `<li class="k-${l.k}">${esc(l.t)}</li>`).join("");
+  if(box) box.innerHTML = previewHTML();
 }
+function syncTextarea(){
+  const ta = document.getElementById("edtx");
+  if(ta) ta.value = ui.editor.text;
+  updatePreview();
+}
+const KEEP = /^[\[※(★]/;   // 소제목·부연·강조는 건드리지 않는다
 function editorView(){
   const e = ui.editor;
   const opts = PHASES.map(x => `<option value="${x.id}" ${e.phase===x.id?"selected":""}>${esc(x.label)}</option>`).join("")
@@ -1465,14 +1479,21 @@ function editorView(){
 
     <div class="field"><label for="edtx">내용 — 한 줄에 한 항목</label>
       <textarea id="edtx" rows="14" placeholder="한 줄에 하나씩 적습니다." data-act="ed-text">${esc(e.text)}</textarea>
-      <p class="flabel" style="margin:16px 0 8px">이렇게 저장됩니다</p>
-      <ol class="proto prevbox" id="edprev">${parseProtocol(e.text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)).map(l=>`<li class="k-${l.k}">${esc(l.t)}</li>`).join("")}</ol>
+      <div class="frow" style="margin:16px 0 8px">
+        <span class="flabel" style="margin:0">이렇게 저장됩니다 — 줄을 누르면 번호 ↔ 나열</span>
+        <span class="btnpair">
+          <button class="toggle" data-act="ed-allnum">모두 번호로</button>
+          <button class="toggle" data-act="ed-alldash">모두 나열로</button>
+        </span>
+      </div>
+      <ol class="proto prevbox" id="edprev">${previewHTML()}</ol>
       <div class="rule">
         <b>[소제목]</b> 대괄호로 감싸면 구간 제목<br>
         <b>- 항목</b> 앞에 - 를 붙이면 번호 없는 나열 (재료·조성)<br>
         <b>(설명)</b> 또는 <b>※</b> 로 시작하면 번호 없는 부연<br>
         <b>★</b> 로 시작하면 빨간 강조<br>
-        그 밖의 줄에는 순서 번호가 자동으로 붙습니다. <b>[재료]</b> 아래는 - 없이도 번호가 빠집니다.
+        그 밖의 줄에는 순서 번호가 자동으로 붙습니다. <b>[재료]</b> 아래는 - 없이도 번호가 빠집니다.<br>
+        불러온 문서에 이미 - 가 붙어 있으면 그대로 둡니다. 위 미리보기에서 줄을 눌러 바꾸세요.
       </div>
     </div>
 
@@ -1675,6 +1696,26 @@ document.getElementById("app").addEventListener("click", e => {
   else if(a === "ed-edit"){
     const c = S.customSteps.find(x => x.id === id);
     if(c){ ui.editor = { id:c.id, phase:c.phase, name:c.name, note:c.note, text:(c.protocol||[]).join("\n") }; ui.impErr = ""; render(); window.scrollTo(0,0); }
+  }
+  else if(a === "ed-line"){
+    if(!ui.editor) return;
+    const raw = ui.editor.text.split(/\r?\n/);
+    const i = +b.dataset.i;
+    const t = (raw[i] || "").trim();
+    if(!t || KEEP.test(t)) return;
+    raw[i] = /^-\s*/.test(t) ? t.replace(/^-\s*/, "") : "- " + t;
+    ui.editor.text = raw.join("\n");
+    syncTextarea();
+  }
+  else if(a === "ed-allnum" || a === "ed-alldash"){
+    if(!ui.editor) return;
+    const dash = a === "ed-alldash";
+    ui.editor.text = ui.editor.text.split(/\r?\n/).map(l => {
+      const t = l.trim();
+      if(!t || KEEP.test(t)) return l;
+      return dash ? (/^-\s*/.test(t) ? t : "- " + t) : t.replace(/^-\s*/, "");
+    }).join("\n");
+    syncTextarea();
   }
   else if(a === "ed-pick"){ document.getElementById("docinput").click(); }
   else if(a === "ed-cancel"){ ui.editor = null; render(); }
