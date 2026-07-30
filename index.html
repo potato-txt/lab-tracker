@@ -194,6 +194,37 @@ select{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);b
 .calcgrid .cu{font-family:var(--mono);font-size:11px}
 .calcgrid input{width:100%;min-height:var(--tap);font-size:16px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:0 12px}
 @media(max-width:420px){.calcgrid{grid-template-columns:1fr}}
+.hdtimer{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;padding:7px 12px;border:1px solid var(--st-run);color:var(--st-run);background:#fbf3e4;border-radius:20px;cursor:pointer;white-space:nowrap;max-width:230px;overflow:hidden}
+.hdtimer.done{border-color:var(--st-done);color:var(--st-done);background:#e9f4ee}
+.hdtimer b{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.hdname{font-family:var(--ui);font-size:12px;overflow:hidden;text-overflow:ellipsis;max-width:110px}
+.hdmore{font-size:11px;opacity:.75}
+@media(max-width:600px){.hdname{display:none}}
+.subtabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.subtab{min-height:42px;padding:0 16px;font:inherit;font-size:14px;font-weight:600;color:var(--ink-soft);background:var(--card);border:1px solid var(--line);border-radius:22px;cursor:pointer}
+.subtab.on{color:#fff;background:var(--accent);border-color:var(--accent)}
+.hint{margin:0 0 14px;font-size:13.5px;color:var(--ink-soft)}
+.pair{display:flex;gap:8px}
+.pair select{max-width:118px;flex:none;min-height:var(--tap);font:inherit;font-size:15px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:0 9px}
+.pair input.solved{background:#eef3f1;border-color:var(--accent)}
+.out{margin-top:14px;padding:15px;background:var(--card);border:1px solid var(--line);border-radius:11px}
+.big{font-family:var(--mono);font-size:25px;font-weight:600;font-variant-numeric:tabular-nums}
+.note{margin:9px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);line-height:1.6}
+.card2{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px}
+.card2 .field:last-child{margin-bottom:0}
+.tcard{border:1px solid var(--line);border-left:4px solid var(--st-todo);border-radius:11px;padding:13px;margin-top:12px;background:var(--paper)}
+.tcard.run{border-left-color:var(--st-run);background:#fbf3e4}
+.tcard.done{border-left-color:var(--st-done);background:#e9f4ee}
+.trow{display:flex;align-items:center;gap:8px}
+.trow input{flex:1;background:transparent;border:none;border-bottom:1px dashed var(--line);border-radius:0;padding:4px 0;font-size:14.5px;font-weight:600}
+.trow input:focus{border-bottom-color:var(--accent);box-shadow:none}
+.tclock{font-family:var(--mono);font-size:38px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:6px 0 2px}
+.tcard.done .tclock{color:var(--st-done)}
+.tmeta{font-size:12.5px;color:var(--ink-soft);margin-bottom:11px}
+.grow{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.grow input{flex:1}
+.gcount{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);white-space:nowrap}
+.gfix{font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);border:1px solid var(--line);border-radius:10px;padding:2px 8px;white-space:nowrap}
 .cwork{margin-top:14px;border:1px solid var(--line);border-radius:9px;padding:11px 13px;background:var(--card)}
 .cwork summary{cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);font-weight:600}
 .cwork ol{margin:12px 0 0;padding-left:19px;font-size:14px}
@@ -212,12 +243,14 @@ select{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);b
       <div class="eyebrow">Cloning → Expression → Purification</div>
       <h1>실험 워크플로우 기록</h1>
     </div>
+    <button class="hdtimer hide" id="hdtimer"></button>
     <span class="save" id="save">자동 저장</span>
     <button class="iconbtn" id="menu" aria-label="메뉴">⋯</button>
   </div>
   <div class="tabs">
     <button class="tab on" data-tab="flow">실험 흐름</button>
     <button class="tab" data-tab="prep">제작 · 준비</button>
+    <button class="tab" data-tab="tools">도구</button>
   </div>
 </header>
 
@@ -954,12 +987,41 @@ const STATUSES = [
   { id:"done",    label:"성공",       dot:"var(--st-done)" },
   { id:"failed",  label:"실패/재시도", dot:"var(--st-fail)" },
 ];
-/* 기본 PHASES + 사용자가 파일로 추가한 단계를 합친다 */
+/* ══ 묶음(그룹) ══
+   기본 묶음은 이름만 바꿀 수 있고, 사용자가 추가한 묶음은 지울 수도 있다. */
+function groupsFlow(){
+  const built = PHASES.map(p => ({ id:p.id, label:(S.phaseNames || {})[p.id] || p.label, built:true }));
+  const extra = (S.phaseExtra || []).map(g => ({ id:g.id, label:g.label, built:false }));
+  return built.concat(extra);
+}
+function groupsPrep(){
+  const nm = S.catNames || {};
+  const built = RECIPE_CATS.map(c => ({ id:c.id, label:nm[c.id] || c.label, built:true }));
+  built.push({ id:"mine", label:nm.mine || "내가 추가한 것", built:true });
+  const extra = (S.catExtra || []).map(g => ({ id:g.id, label:g.label, built:false }));
+  return built.concat(extra);
+}
 function phaseList(){
+  const gs = groupsFlow();
   const mine = S.customSteps || [];
-  const out = PHASES.map(p => ({ id:p.id, label:p.label, steps: p.steps.concat(mine.filter(c => c.phase === p.id)) }));
-  const etc = mine.filter(c => !PHASES.some(p => p.id === c.phase));
-  if(etc.length) out.push({ id:"etc", label:"추가한 프로토콜", steps:etc });
+  const out = gs.map(g => {
+    const base = PHASES.find(p => p.id === g.id);
+    return { id:g.id, label:g.label, steps:(base ? base.steps : []).concat(mine.filter(c => c.phase === g.id)) };
+  });
+  const orphan = mine.filter(c => !gs.some(g => g.id === c.phase));
+  if(orphan.length) out.push({ id:"etc", label:"기타", steps:orphan });
+  return out;
+}
+function prepList(){
+  const gs = groupsPrep();
+  const mine = S.custom || [];
+  const out = gs.map(g => ({
+    id:g.id, label:g.label,
+    items: RECIPES.filter(r => r.cat === g.id).map(r => ({ mine:false, id:r.id, name:r.name }))
+      .concat(mine.filter(c => (c.cat || "mine") === g.id).map(c => ({ mine:true, id:c.id, name:c.name }))),
+  }));
+  const orphan = mine.filter(c => !gs.some(g => g.id === (c.cat || "mine")));
+  if(orphan.length) out.push({ id:"etc", label:"기타", items:orphan.map(c => ({ mine:true, id:c.id, name:c.name })) });
   return out;
 }
 function allSteps(){ return phaseList().flatMap(p => p.steps.map(s => ({ ...s, phaseLabel:p.label }))); }
@@ -1175,6 +1237,9 @@ async function syncNow(silent){
       if(fresh && !typing()){
         S = fresh;
         S.steps = S.steps || {}; S.memos = S.memos || {}; S.custom = S.custom || []; S.customSteps = S.customSteps || []; S.calc = S.calc || { ...CALC_DEF };
+  S.timers = S.timers || []; S.dil = S.dil || { ...DIL_DEF };
+  S.phaseNames = S.phaseNames || {}; S.phaseExtra = S.phaseExtra || [];
+  S.catNames = S.catNames || {}; S.catExtra = S.catExtra || [];
         allSteps().forEach(x => { S.steps[x.id] = { ...blank(), ...(S.steps[x.id] || {}) }; });
       }
       pics = {};
@@ -1188,8 +1253,8 @@ async function syncNow(silent){
 }
 
 /* ══ 상태 ══ */
-let S = { steps:{}, current:null, memos:{}, custom:[], customSteps:[], calc:null };
-let ui = { tab:"flow", step:PHASES[0].steps[0].id, recipe:RECIPES[0].id, detail:false, showProto:true, picErr:"", busy:false, editor:null, impErr:"" };
+let S = { steps:{}, current:null, memos:{}, custom:[], customSteps:[], calc:null, timers:[], dil:null, phaseNames:{}, phaseExtra:[], catNames:{}, catExtra:[] };
+let ui = { tab:"flow", step:PHASES[0].steps[0].id, recipe:RECIPES[0].id, detail:false, showProto:true, picErr:"", busy:false, editor:null, impErr:"", groups:null, tmin:"", tname:"", tool:"timer" };
 let pics = {};
 
 const blank = () => ({ status:"todo", date:"", result:"", trouble:[], photoN:0 });
@@ -1553,6 +1618,27 @@ function previewHTML(){
       : `<li class="k-${l.k}">${esc(l.t)}</li>`
   ).join("");
 }
+function groupsView(){
+  const isFlow = ui.groups === "flow";
+  const gs = isFlow ? groupsFlow() : groupsPrep();
+  const lists = isFlow ? phaseList() : prepList();
+  const count = id => {
+    const g = lists.find(x => x.id === id);
+    return g ? (isFlow ? g.steps.length : g.items.length) : 0;
+  };
+  return `<div class="detail">
+    <div class="dhead"><div class="dphase">${isFlow?"실험 흐름":"제작 · 준비"}</div>
+      <h2>묶음 관리</h2>
+      <p class="dnote">이름을 고치거나 새 묶음을 추가할 수 있습니다. 기본 묶음은 이름만 바꿀 수 있습니다.</p></div>
+    ${gs.map(g => `<div class="grow">
+      <input type="text" value="${esc(g.label)}" data-act="gname" data-id="${g.id}" placeholder="묶음 이름">
+      <span class="gcount">${count(g.id)}개</span>
+      ${g.built ? `<span class="gfix">기본</span>` : `<button class="x" data-act="gdel" data-id="${g.id}" title="삭제">×</button>`}
+    </div>`).join("")}
+    <button class="addnode" data-act="gadd">＋ 묶음 추가</button>
+    <div class="edrow" style="margin-top:16px"><button class="addbtn" data-act="gdone">완료</button></div>
+  </div>`;
+}
 function updatePreview(){
   const box = document.getElementById("edprev");
   if(box) box.innerHTML = previewHTML();
@@ -1566,8 +1652,9 @@ const KEEP = /^[\[※(★]/;   // 소제목·부연·강조는 건드리지 않�
 function editorView(){
   const e = ui.editor;
   const prep = e.kind === "prep";
-  const opts = PHASES.map(x => `<option value="${x.id}" ${e.phase===x.id?"selected":""}>${esc(x.label)}</option>`).join("")
-    + `<option value="etc" ${e.phase==="etc"?"selected":""}>추가한 프로토콜 (별도 묶음)</option>`;
+  const gs = prep ? groupsPrep() : groupsFlow();
+  const cur = prep ? (e.cat || "mine") : e.phase;
+  const opts = gs.map(x => `<option value="${x.id}" ${cur===x.id?"selected":""}>${esc(x.label)}</option>`).join("");
   return `<div class="detail">
     <div class="dhead"><div class="dphase">${prep?"제작 · 준비":"실험 흐름"} · ${e.id?"편집":"추가"}</div>
       <h2>${e.id?esc(e.name||"이름 없음"):"문서에서 불러오기"}</h2>
@@ -1585,9 +1672,9 @@ function editorView(){
     <div class="field"><label for="ednm">${prep?"항목 이름":"단계 이름"}</label>
       <input id="ednm" type="text" value="${esc(e.name)}" placeholder="${prep?"예: 1X TAE buffer":"예: Western blot"}" data-act="ed-name"></div>
     ${prep ? "" : `<div class="field"><label for="ednt">한 줄 설명</label>
-      <input id="ednt" type="text" value="${esc(e.note)}" placeholder="예: 항체 반응 → 발색" data-act="ed-note"></div>
+      <input id="ednt" type="text" value="${esc(e.note)}" placeholder="예: 항체 반응 → 발색" data-act="ed-note"></div>`}
     <div class="field"><label for="edph">어느 묶음에 넣을까요</label>
-      <select id="edph" data-act="ed-phase">${opts}</select></div>`}
+      <select id="edph" data-act="ed-phase">${opts}</select></div>
 
     <div class="field"><label for="edmt">재료 · 준비물 — 한 줄에 하나, 번호 없이 나열됩니다</label>
       <textarea id="edmt" rows="6" placeholder="PCR tube&#10;5X HF buffer&#10;template DNA" data-act="ed-mats">${esc(e.mats || "")}</textarea></div>
@@ -1621,7 +1708,302 @@ function editorView(){
   </div>`;
 }
 
+
+
+/* ══ 희석 계산기 ══ */
+const DIL_CONC = {
+  "M":{f:1,fam:"mol"}, "mM":{f:1e-3,fam:"mol"}, "µM":{f:1e-6,fam:"mol"}, "nM":{f:1e-9,fam:"mol"},
+  "mg/ml":{f:1,fam:"mass"}, "µg/ml":{f:1e-3,fam:"mass"}, "ng/µl":{f:1e-3,fam:"mass"},
+  "ng/ml":{f:1e-6,fam:"mass"}, "%(w/v)":{f:10,fam:"mass"}, "X":{f:1,fam:"x"},
+};
+const DIL_VOL = { "µl":1e-3, "ml":1, "L":1000 };
+const DIL_DEF = {
+  mode:"cv",
+  c1:"10", c1u:"mg/ml", v1:"", v1u:"µl", c2:"0.5", c2u:"mg/ml", v2:"10", v2u:"ml",
+  fFold:"1000", fFinal:"10", fFinalU:"ml",
+  sConc:"100", sConcU:"mg/ml", sFold:"10", sSteps:"6", sVol:"1", sVolU:"ml",
+  dBp:"5369", dNg:"10", dNm:"", dVol:"1", dLast:"ng",
+};
+const D = () => (S.dil = S.dil || { ...DIL_DEF });
+const dnum = k => { const v = parseFloat(D()[k]); return isFinite(v) ? v : null; };
+const dblank = k => String(D()[k] == null ? "" : D()[k]).trim() === "";
+function sig(v, d = 4){
+  if(!isFinite(v)) return "—";
+  if(v === 0) return "0";
+  const a = Math.abs(v);
+  if(a >= 1e6 || a < 1e-4) return v.toExponential(2);
+  return String(+v.toPrecision(d));
+}
+const dinput = (k, label, unitKey, units) => {
+  const d = D();
+  const sel = unitKey
+    ? `<select data-act="dil" data-f="${unitKey}">${Object.keys(units).map(u =>
+        `<option${d[unitKey]===u?" selected":""}>${u}</option>`).join("")}</select>` : "";
+  return `<div><label>${label}</label><div class="pair">
+    <input type="text" inputmode="decimal" value="${esc(d[k])}" data-act="dil" data-f="${k}"
+      class="${dblank(k)&&d.mode==="cv"&&["c1","v1","c2","v2"].includes(k)?"solved":""}">${sel}</div></div>`;
+};
+const DIL_MODES = [["cv","C₁V₁ = C₂V₂"],["fold","배수 희석"],["serial","연속 희석"],["dna","DNA ng/µl ↔ nM"]];
+
+function dilHTML(){
+  const d = D();
+  let body;
+  if(d.mode === "cv"){
+    body = `<p class="hint">네 칸 중 <b>세 칸</b>을 채우면 빈 칸을 계산합니다. 지운 칸이 계산 대상이 됩니다.</p>
+      <div class="calcgrid">
+        ${dinput("c1","C₁ — stock 농도","c1u",DIL_CONC)}
+        ${dinput("v1","V₁ — 넣을 stock 부피","v1u",DIL_VOL)}
+      </div>
+      <div class="calcgrid">
+        ${dinput("c2","C₂ — 목표 농도","c2u",DIL_CONC)}
+        ${dinput("v2","V₂ — 최종 부피","v2u",DIL_VOL)}
+      </div>`;
+  }else if(d.mode === "fold"){
+    body = `<p class="hint">1/1000 처럼 배수로 희석할 때 넣을 stock 과 희석액 양을 구합니다.</p>
+      <div class="calcgrid">
+        ${dinput("fFold","희석 배수 <span class='cu'>1 : N</span>")}
+        ${dinput("fFinal","최종 부피","fFinalU",DIL_VOL)}
+      </div>`;
+  }else if(d.mode === "serial"){
+    body = `<p class="hint">같은 배수로 여러 단계를 내려갈 때 각 tube 의 농도와 넣을 양을 표로 만듭니다.</p>
+      <div class="calcgrid">
+        ${dinput("sConc","Stock 농도","sConcU",DIL_CONC)}
+        ${dinput("sFold","단계별 배수 <span class='cu'>1 : N</span>")}
+      </div>
+      <div class="calcgrid">
+        ${dinput("sSteps","단계 수")}
+        ${dinput("sVol","각 tube 최종 부피","sVolU",DIL_VOL)}
+      </div>`;
+  }else{
+    body = `<p class="hint">이중가닥 DNA 기준. 염기쌍 평균 분자량 650 g/mol 을 씁니다.</p>
+      <div class="calcgrid">
+        ${dinput("dBp","길이 <span class='cu'>bp</span>")}
+        ${dinput("dVol","부피 <span class='cu'>µl</span>")}
+      </div>
+      <div class="calcgrid">
+        ${dinput("dNg","농도 <span class='cu'>ng/µl</span>")}
+        ${dinput("dNm","농도 <span class='cu'>nM</span>")}
+      </div>`;
+  }
+  return `<div class="chips" style="margin-bottom:14px">
+      ${DIL_MODES.map(([m, lb]) => `<button class="chip ${d.mode===m?"on":""}" data-act="dil-mode" data-m="${m}">${lb}</button>`).join("")}
+    </div>
+    ${body}
+    <div id="dilout">${dilOutHTML()}</div>`;
+}
+function dilOutHTML(){
+  const d = D();
+  const err = m => `<p class="picerr" style="margin:12px 0 0">${m}</p>`;
+  const box = (label, big, note) => `<div class="out">
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:4px">${label}</div>
+    <div class="big">${big}</div>${note?`<p class="note">${note}</p>`:""}</div>`;
+
+  if(d.mode === "cv"){
+    const keys = ["c1","v1","c2","v2"], empt = keys.filter(dblank);
+    if(empt.length !== 1) return err(empt.length === 0 ? "계산할 칸을 하나 비워 주세요." : `빈 칸이 ${empt.length}개입니다. 세 칸을 채워 주세요.`);
+    const t = empt[0], cu1 = DIL_CONC[d.c1u], cu2 = DIL_CONC[d.c2u];
+    if(!t.startsWith("c") && cu1.fam !== cu2.fam) return err("C₁ 과 C₂ 의 단위 종류가 다릅니다. 몰 농도끼리, 질량 농도끼리 맞춰 주세요.");
+    const c1 = dnum("c1") !== null ? dnum("c1")*cu1.f : null, c2 = dnum("c2") !== null ? dnum("c2")*cu2.f : null;
+    const v1 = dnum("v1") !== null ? dnum("v1")*DIL_VOL[d.v1u] : null, v2 = dnum("v2") !== null ? dnum("v2")*DIL_VOL[d.v2u] : null;
+    const bad = v => v === null || !isFinite(v) || v <= 0;
+    if(t === "v1"){
+      if(bad(c1)||bad(c2)||bad(v2)) return err("숫자를 0보다 큰 값으로 넣어 주세요.");
+      if(c2 > c1) return err("목표 농도가 stock 보다 높습니다. 희석으로는 만들 수 없습니다.");
+      const V = c2*v2/c1, u = d.v1u;
+      return box("V₁ — 넣을 stock 부피", `${sig(V/DIL_VOL[u])} <span style="font-size:15px">${u}</span>`,
+        `희석액 ${sig((v2-V)/DIL_VOL[u])} ${u} 를 더해 최종 ${sig(v2/DIL_VOL[u])} ${u} 로 맞춥니다.<br>희석 배수 1 : ${sig(v2/V)}`);
+    }
+    if(t === "v2"){
+      if(bad(c1)||bad(c2)||bad(v1)) return err("숫자를 0보다 큰 값으로 넣어 주세요.");
+      const V = c1*v1/c2, u = d.v2u;
+      return box("V₂ — 최종 부피", `${sig(V/DIL_VOL[u])} <span style="font-size:15px">${u}</span>`,
+        `희석액 ${sig((V-v1)/DIL_VOL[u])} ${u} 를 더합니다.`);
+    }
+    if(t === "c1"){
+      if(bad(c2)||bad(v1)||bad(v2)) return err("숫자를 0보다 큰 값으로 넣어 주세요.");
+      const C = c2*v2/v1, u = d.c1u;
+      return box("C₁ — 필요한 stock 농도", `${sig(C/DIL_CONC[u].f)} <span style="font-size:15px">${u}</span>`,
+        `이 stock 을 ${sig(v1/DIL_VOL[d.v1u])} ${d.v1u} 넣으면 됩니다.`);
+    }
+    if(bad(c1)||bad(v1)||bad(v2)) return err("숫자를 0보다 큰 값으로 넣어 주세요.");
+    const C = c1*v1/v2, u = d.c2u;
+    return box("C₂ — 만들어지는 농도", `${sig(C/DIL_CONC[u].f)} <span style="font-size:15px">${u}</span>`,
+      `희석 배수 1 : ${sig(v2/v1)}`);
+  }
+
+  if(d.mode === "fold"){
+    const n = dnum("fFold"), fv = dnum("fFinal"), u = d.fFinalU;
+    if(!(n > 1) || !(fv > 0)) return err("배수는 1보다 크고, 부피는 0보다 커야 합니다.");
+    const st = fv/n, dl = fv - st, inUl = st*DIL_VOL[u]/DIL_VOL["µl"];
+    return `<table class="rt" style="margin-top:14px">
+      <thead><tr><th>성분</th><th>부피</th></tr></thead><tbody>
+      <tr><td>stock</td><td>${sig(st)} ${u}${u!=="µl"?` (= ${sig(inUl)} µl)`:""}</td></tr>
+      <tr><td>희석액</td><td>${sig(dl)} ${u}</td></tr>
+      <tr><td>최종</td><td>${sig(fv)} ${u}</td></tr></tbody></table>
+      <p class="stat">1 : ${sig(n)} 희석 · stock 농도의 ${sig(100/n)} %</p>
+      ${inUl < 1 ? err("stock 이 1 µl 미만입니다. 중간 희석을 한 단계 두는 편이 정확합니다.") : ""}`;
+  }
+
+  if(d.mode === "serial"){
+    const c0 = dnum("sConc"), n = dnum("sFold"), k = parseInt(d.sSteps, 10), v = dnum("sVol");
+    const cu = d.sConcU, vu = d.sVolU;
+    if(!(c0 > 0) || !(n > 1) || !(k >= 1) || !(v > 0)) return err("농도·부피는 0보다, 배수는 1보다 커야 하고 단계는 1 이상이어야 합니다.");
+    if(k > 20) return err("단계는 20 이하로 넣어 주세요.");
+    const move = v/n, dl = v - move, moveUl = move*DIL_VOL[vu]/DIL_VOL["µl"];
+    let rows = `<tr><td>stock</td><td>${sig(c0)} ${cu}</td><td>—</td><td>—</td></tr>`;
+    for(let i = 1; i <= k; i++) rows += `<tr><td>#${i}</td><td>${sig(c0/Math.pow(n,i))} ${cu}</td><td>${sig(move)} ${vu}</td><td>${sig(dl)} ${vu}</td></tr>`;
+    return `<table class="rt" style="margin-top:14px">
+      <thead><tr><th>tube</th><th>농도</th><th>앞 tube 에서</th><th>희석액</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="stat">각 tube ${sig(v)} ${vu} · 매 단계 1 : ${sig(n)} · 최종 1 : ${sig(Math.pow(n,k))}</p>
+      ${moveUl < 2 ? err("옮기는 양이 2 µl 미만입니다. tube 부피를 늘리거나 배수를 낮추세요.") : ""}`;
+  }
+
+  const bp = dnum("dBp"), vol = dnum("dVol");
+  if(!(bp > 0)) return err("길이를 0보다 큰 값으로 넣어 주세요.");
+  const MW = bp*650;
+  let ng, nm;
+  if(d.dLast === "nm"){
+    nm = dnum("dNm"); if(nm === null || nm <= 0) return err("nM 값을 넣어 주세요.");
+    ng = nm*MW/1e6;
+  }else{
+    ng = dnum("dNg"); if(ng === null || ng <= 0) return err("ng/µl 값을 넣어 주세요.");
+    nm = ng*1e6/MW;
+  }
+  const pmol = vol !== null && vol > 0 ? nm*vol/1000 : null;
+  return box(`분자량 ${sig(MW)} g/mol (${sig(bp)} bp × 650)`,
+    `${sig(ng)} <span style="font-size:15px">ng/µl</span> = ${sig(nm)} <span style="font-size:15px">nM</span>`,
+    `${pmol !== null ? `${sig(vol)} µl 안에 ${sig(pmol)} pmol (= ${sig(ng*vol)} ng)<br>` : ""}nM = ng/µl × 10⁶ ÷ (bp × 650)`);
+}
+function updateDilOut(){
+  const el = document.getElementById("dilout");
+  if(el) el.innerHTML = dilOutHTML();
+}
+
+/* ══ 타이머 ══
+   초 단위 표시는 화면에서만 굴리고, 저장은 시작·정지 같은 조작이 있을 때만 한다.
+   startedAt(시각)을 저장하므로 앱을 닫았다 열어도 시간이 이어진다. */
+let tickTimer = null, audioCtx = null;
+
+function fmtMs(ms){
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const pad = v => String(v).padStart(2, "0");
+  return (h ? pad(h) + ":" : "") + pad(m) + ":" + pad(sec);
+}
+function timerNow(t){
+  return (t.elapsed || 0) + (t.startedAt ? Date.now() - t.startedAt : 0);
+}
+function timerShown(t){
+  return t.mode === "down" ? Math.max(0, t.ms - timerNow(t)) : timerNow(t);
+}
+function beep(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return;
+    audioCtx = audioCtx || new AC();
+    if(audioCtx.state === "suspended") audioCtx.resume();
+    const t0 = audioCtx.currentTime;
+    [0, 0.4, 0.8].forEach(d => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = "sine"; o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, t0 + d);
+      g.gain.exponentialRampToValueAtTime(0.3, t0 + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.35);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t0 + d); o.stop(t0 + d + 0.37);
+    });
+  }catch(e){}
+}
+function updateHeaderTimer(){
+  const el = document.getElementById("hdtimer");
+  if(!el) return;
+  const list = S.timers || [];
+  const done = list.filter(t => t.done);
+  const run = list.filter(t => t.startedAt);
+  let pick = null, cls = "hdtimer";
+  if(done.length){ pick = done[0]; cls += " done"; }
+  else if(run.length){
+    const downs = run.filter(t => t.mode === "down");
+    pick = downs.length ? downs.reduce((a, b) => (timerShown(a) <= timerShown(b) ? a : b)) : run[0];
+  }
+  if(!pick){ el.className = "hdtimer hide"; return; }
+  const extra = (run.length + done.length) - 1;
+  el.className = cls;
+  el.innerHTML = `<b>${esc(fmtMs(timerShown(pick)))}</b><span class="hdname">${esc(pick.name)}</span>${extra > 0 ? `<span class="hdmore">+${extra}</span>` : ""}`;
+}
+function ensureTick(){
+  const running = (S.timers || []).some(t => t.startedAt);
+  if(running && !tickTimer) tickTimer = setInterval(tick, 250);
+  if(!running && tickTimer){ clearInterval(tickTimer); tickTimer = null; }
+}
+function tick(){
+  let finished = false;
+  (S.timers || []).forEach(t => {
+    if(t.mode === "down" && t.startedAt && t.ms - timerNow(t) <= 0 && !t.done){
+      t.done = true; t.elapsed = t.ms; t.startedAt = null; finished = true;
+    }
+    const el = document.querySelector(`[data-t="${t.id}"]`);
+    if(el) el.textContent = fmtMs(timerShown(t));
+  });
+  updateHeaderTimer();
+  if(finished){ beep(); save(); render(); }
+}
+const PRESETS = [
+  ["1분", 1], ["5분", 5], ["10분", 10], ["15분", 15],
+  ["20분", 20], ["30분", 30], ["1시간", 60], ["2시간", 120],
+];
+function addTimer(min, name){
+  const t = { id:"t"+Date.now(), name:name || (min ? min + "분 타이머" : "스톱워치"),
+              mode: min ? "down" : "up", ms:(min || 0) * 60000,
+              startedAt:Date.now(), elapsed:0, done:false };
+  S.timers = (S.timers || []).concat(t);
+  beep(); if(audioCtx && audioCtx.state === "running"){ /* 소리 권한 확보용 */ }
+  save(); render();
+}
+function timerHTML(){
+  const list = S.timers || [];
+  return `<div class="card2">
+    <div class="frow"><span class="flabel" style="margin:0">스톱워치 · 타이머</span></div>
+    <div class="chips" style="margin-bottom:12px">
+      ${PRESETS.map(([lb, m]) => `<button class="chip" data-act="tadd" data-m="${m}">${lb}</button>`).join("")}
+      <button class="chip" data-act="tadd" data-m="0">스톱워치</button>
+    </div>
+    <div class="calcgrid" style="margin-bottom:14px">
+      <div><label for="tmin">직접 입력 <span class="cu">분</span></label>
+        <input id="tmin" type="text" inputmode="decimal" placeholder="예: 90" data-act="tmin" value="${esc(ui.tmin || "")}"></div>
+      <div><label for="tnm">이름</label>
+        <input id="tnm" type="text" placeholder="예: R.E cut" data-act="tname-new" value="${esc(ui.tname || "")}"></div>
+    </div>
+    <button class="addbtn" data-act="tadd-custom">＋ 타이머 시작</button>
+    ${list.length === 0 ? `<p class="empty" style="margin-top:14px">돌아가는 타이머가 없습니다. 위에서 하나 고르세요.</p>` : ""}
+    ${list.map(t => `<div class="tcard ${t.startedAt?"run":""} ${t.done?"done":""}">
+      <div class="trow">
+        <input type="text" value="${esc(t.name)}" data-act="tname" data-id="${t.id}">
+        <button class="x" data-act="tdel" data-id="${t.id}" title="삭제">×</button>
+      </div>
+      <div class="tclock" data-t="${t.id}">${fmtMs(timerShown(t))}</div>
+      <div class="tmeta">${t.mode === "down" ? fmtMs(t.ms) + " 카운트다운" : "경과 시간"}${t.done?" · 끝났습니다":""}</div>
+      <div class="chips">
+        <button class="chip" data-act="ttoggle" data-id="${t.id}">${t.startedAt?"일시정지":(t.done?"다시 시작":"시작")}</button>
+        <button class="chip" data-act="treset" data-id="${t.id}">초기화</button>
+      </div>
+    </div>`).join("")}
+  </div>`;
+}
+const TOOL_TABS = [["timer","스톱워치 · 타이머"],["lig","Ligation 계산기"],["dil","희석 계산기"]];
+function viewTools(){
+  const cur = ui.tool || "timer";
+  const nav = `<div class="subtabs">${TOOL_TABS.map(([k, lb]) =>
+    `<button class="subtab ${cur===k?"on":""}" data-act="tool" data-id="${k}">${lb}</button>`).join("")}</div>`;
+  let body;
+  if(cur === "timer") body = timerHTML();
+  else if(cur === "lig") body = `<div class="card2">${ligHTML()}</div>`;
+  else body = `<div class="card2"><span class="flabel">희석 계산기</span>${dilHTML()}</div>`;
+  return nav + body;
+}
+
 function viewFlow(){
+  if(ui.groups === "flow") return groupsView();
   if(ui.editor && ui.editor.kind !== "prep") return editorView();
   const steps = allSteps();
   const done = steps.filter(s => S.steps[s.id] && S.steps[s.id].status === "done").length;
@@ -1642,8 +2024,9 @@ function viewFlow(){
       ${e.photoN>0?`<span class="badge pic">▤${e.photoN}</span>`:""}
       ${e.trouble.length?`<span class="badge flag">⚑${e.trouble.length}</span>`:""}
     </button>`;
-  }).join("") + "</div>").join("")
-    + `<button class="addnode" data-act="ed-new">＋ 프로토콜 파일 추가</button>`;
+  }).join("") + (p.steps.length ? "" : `<p class="empty" style="margin:0 0 8px">비어 있음</p>`) + "</div>").join("")
+    + `<button class="addnode" data-act="ed-new">＋ 프로토콜 파일 추가</button>`
+    + `<button class="addnode" data-act="gmanage" data-id="flow">묶음 관리</button>`;
 
   const st = STEP(ui.step), e = S.steps[ui.step];
   const proto = ui.showProto
@@ -1705,15 +2088,16 @@ function viewFlow(){
 }
 
 function viewPrep(){
+  if(ui.groups === "prep") return groupsView();
   if(ui.editor && ui.editor.kind === "prep") return editorView();
-  const list = RECIPE_CATS.map(c => `<div class="group"><h2>${esc(c.label)}</h2>` +
-      RECIPES.filter(r => r.cat === c.id).map(r =>
-        `<button class="node ${ui.recipe===r.id?"on":""}" data-act="openr" data-id="${r.id}">
-          <span class="nm">${esc(r.name)}</span>${S.memos[r.id]?'<span class="badge pic">메모</span>':""}</button>`).join("") + `</div>`).join("")
-    + `<div class="group"><h2>내가 추가한 것</h2>` + S.custom.map(c =>
-        `<button class="node ${ui.recipe===c.id?"on":""}" data-act="openr" data-id="${c.id}">
-          <span class="nm">${esc(c.name || "제목 없음")}</span></button>`).join("")
-    + `<button class="addnode" data-act="addcustom">＋ 항목 추가 · 파일 불러오기</button></div>`;
+  const list = prepList().map(g => `<div class="group"><h2>${esc(g.label)}</h2>`
+      + g.items.map(it =>
+        `<button class="node ${ui.recipe===it.id?"on":""}" data-act="openr" data-id="${it.id}">
+          <span class="nm">${esc(it.name || "제목 없음")}</span>${(!it.mine && S.memos[it.id])?'<span class="badge pic">메모</span>':""}</button>`).join("")
+      + (g.items.length ? "" : `<p class="empty" style="margin:0 0 8px">비어 있음</p>`)
+      + `</div>`).join("")
+    + `<button class="addnode" data-act="addcustom">＋ 항목 추가 · 파일 불러오기</button>`
+    + `<button class="addnode" data-act="gmanage" data-id="prep">묶음 관리</button>`;
 
   const cu = S.custom.find(c => c.id === ui.recipe);
   const r  = RECIPES.find(x => x.id === ui.recipe);
@@ -1761,7 +2145,7 @@ function render(){
     keep = { act:focus.dataset.act, id:focus.dataset.id || "", f:focus.dataset.f || "", pos };
   }
 
-  app.innerHTML = ui.tab === "flow" ? viewFlow() : viewPrep();
+  app.innerHTML = ui.tab === "flow" ? viewFlow() : ui.tab === "tools" ? viewTools() : viewPrep();
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.tab === ui.tab));
 
   if(keep){
@@ -1770,6 +2154,8 @@ function render(){
     if(n && n.focus){ n.focus(); if(keep.pos != null){ try{ n.setSelectionRange(keep.pos, keep.pos); }catch(e){} } }
   }
   if(ui.tab === "flow") loadPics(ui.step);
+  ensureTick();
+  updateHeaderTimer();
 }
 
 /* ══ 이벤트 ══ */
@@ -1792,6 +2178,47 @@ document.getElementById("app").addEventListener("click", e => {
   else if(a === "pick"){ document.getElementById("picinput").click(); }
   else if(a === "delpic"){ savePics(ui.step, (pics[ui.step]||[]).filter(p => p.id !== id)); }
   else if(a === "zoom"){ const p = (pics[ui.step]||[]).find(x => x.id === id); if(p) lightbox(p); }
+  else if(a === "tool"){ ui.tool = id; render(); window.scrollTo(0,0); }
+  else if(a === "dil-mode"){ D().mode = b.dataset.m; save(); render(); }
+  else if(a === "tadd"){ addTimer(+b.dataset.m, +b.dataset.m ? null : "스톱워치"); }
+  else if(a === "tadd-custom"){
+    const m = parseFloat(ui.tmin);
+    if(!isFinite(m) || m <= 0){ ui.tmin = ""; addTimer(0, ui.tname || "스톱워치"); }
+    else addTimer(m, ui.tname || (m + "분 타이머"));
+    ui.tmin = ""; ui.tname = ""; render();
+  }
+  else if(a === "ttoggle"){
+    const t = (S.timers || []).find(x => x.id === id);
+    if(t){
+      if(t.startedAt){ t.elapsed = timerNow(t); t.startedAt = null; }
+      else { if(t.done){ t.done = false; t.elapsed = 0; } t.startedAt = Date.now(); beep(); }
+      save(); render();
+    }
+  }
+  else if(a === "treset"){
+    const t = (S.timers || []).find(x => x.id === id);
+    if(t){ t.startedAt = null; t.elapsed = 0; t.done = false; save(); render(); }
+  }
+  else if(a === "tdel"){ S.timers = (S.timers || []).filter(x => x.id !== id); save(); render(); }
+  else if(a === "gmanage"){ ui.groups = id; render(); window.scrollTo(0,0); }
+  else if(a === "gdone"){ ui.groups = null; render(); }
+  else if(a === "gadd"){
+    const g = { id:"g"+Date.now(), label:"새 묶음" };
+    if(ui.groups === "flow"){ S.phaseExtra = (S.phaseExtra||[]).concat(g); }
+    else { S.catExtra = (S.catExtra||[]).concat(g); }
+    save(); render();
+  }
+  else if(a === "gdel"){
+    if(ui.groups === "flow"){
+      const home = PHASES[0].id;
+      (S.customSteps||[]).forEach(c => { if(c.phase === id) c.phase = home; });
+      S.phaseExtra = (S.phaseExtra||[]).filter(g => g.id !== id);
+    }else{
+      (S.custom||[]).forEach(c => { if((c.cat||"mine") === id) c.cat = "mine"; });
+      S.catExtra = (S.catExtra||[]).filter(g => g.id !== id);
+    }
+    save(); render();
+  }
   else if(a === "calc-reset"){ S.calc = { ...CALC_DEF }; save(); render(); }
   else if(a === "ed-new"){ ui.editor = { kind:"step", id:null, phase:PHASES[0].id, name:"", note:"", mats:"", text:"" }; ui.impErr = ""; render(); window.scrollTo(0,0); }
   else if(a === "ed-edit"){
@@ -1848,9 +2275,9 @@ document.getElementById("app").addEventListener("click", e => {
       const body = lines.join("\n");
       if(ed.id){
         const c = S.custom.find(x => x.id === ed.id);
-        if(c){ c.name = ed.name.trim(); c.body = body; ui.recipe = c.id; }
+        if(c){ c.name = ed.name.trim(); c.body = body; c.cat = ed.cat || "mine"; ui.recipe = c.id; }
       }else{
-        const it = { id:"c"+Date.now(), name:ed.name.trim(), body };
+        const it = { id:"c"+Date.now(), name:ed.name.trim(), body, cat:ed.cat || "mine" };
         S.custom.push(it); ui.recipe = it.id;
       }
       ui.editor = null; ui.detail = true; ui.impErr = "";
@@ -1869,12 +2296,12 @@ document.getElementById("app").addEventListener("click", e => {
     ui.editor = null; ui.detail = true; ui.impErr = "";
     save(); render();
   }
-  else if(a === "addcustom"){ ui.editor = { kind:"prep", id:null, phase:"", name:"", note:"", mats:"", text:"" }; ui.impErr = ""; render(); window.scrollTo(0,0); }
+  else if(a === "addcustom"){ ui.editor = { kind:"prep", id:null, phase:"", cat:"mine", name:"", note:"", mats:"", text:"" }; ui.impErr = ""; render(); window.scrollTo(0,0); }
   else if(a === "prepedit"){
     const c = S.custom.find(x => x.id === id);
     if(c){
       const sp = splitProtocol((c.body || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean));
-      ui.editor = { kind:"prep", id:c.id, phase:"", name:c.name, note:"", mats:sp.mats.join("\n"), text:sp.proc.join("\n") };
+      ui.editor = { kind:"prep", id:c.id, phase:"", cat:c.cat || "mine", name:c.name, note:"", mats:sp.mats.join("\n"), text:sp.proc.join("\n") };
       ui.impErr = ""; render(); window.scrollTo(0,0);
     }
   }
@@ -1898,6 +2325,30 @@ document.getElementById("app").addEventListener("input", e => {
     save(); updateCalc();
   }
   else if(a === "ed-mats"){ ui.editor.mats = t.value; updatePreview(); }
+  else if(a === "dil"){
+    const f = t.dataset.f;
+    D()[f] = t.value;
+    if(f === "dNg") D().dLast = "ng";
+    if(f === "dNm") D().dLast = "nm";
+    save(); updateDilOut();
+  }
+  else if(a === "tmin"){ ui.tmin = t.value; }
+  else if(a === "tname-new"){ ui.tname = t.value; }
+  else if(a === "tname"){
+    const tm = (S.timers || []).find(x => x.id === t.dataset.id);
+    if(tm){ tm.name = t.value; save(); }
+  }
+  else if(a === "gname"){
+    const id = t.dataset.id, v = t.value;
+    if(ui.groups === "flow"){
+      if(PHASES.some(p => p.id === id)){ S.phaseNames = { ...(S.phaseNames||{}), [id]:v }; }
+      else { S.phaseExtra = (S.phaseExtra||[]).map(g => g.id === id ? { ...g, label:v } : g); }
+    }else{
+      if(RECIPE_CATS.some(c => c.id === id) || id === "mine"){ S.catNames = { ...(S.catNames||{}), [id]:v }; }
+      else { S.catExtra = (S.catExtra||[]).map(g => g.id === id ? { ...g, label:v } : g); }
+    }
+    save();
+  }
   else if(a === "cap"){
     const arr = (pics[ui.step]||[]).map(p => p.id === t.dataset.id ? { ...p, caption:t.value } : p);
     clearTimeout(window.__capT);
@@ -1907,7 +2358,13 @@ document.getElementById("app").addEventListener("input", e => {
 });
 
 document.getElementById("app").addEventListener("change", e => {
-  if(e.target.dataset.act === "ed-phase"){ ui.editor.phase = e.target.value; return; }
+  if(e.target.dataset.act === "dil"){
+    D()[e.target.dataset.f] = e.target.value; save(); updateDilOut(); return;
+  }
+  if(e.target.dataset.act === "ed-phase"){
+    if(ui.editor.kind === "prep") ui.editor.cat = e.target.value; else ui.editor.phase = e.target.value;
+    return;
+  }
   if(e.target.id === "docinput"){
     const el = e.target, f = (el.files || [])[0];
     if(f) importDoc(f).then(() => { el.value = ""; });
@@ -2081,6 +2538,9 @@ function openSheet(){
   document.body.appendChild(w);
 }
 document.getElementById("menu").addEventListener("click", openSheet);
+document.getElementById("hdtimer").addEventListener("click", () => {
+  ui.tab = "tools"; ui.tool = "timer"; render(); window.scrollTo(0, 0);
+});
 
 document.addEventListener("visibilitychange", () => { if(!document.hidden) syncNow(true); });
 window.addEventListener("focus", () => syncNow(true));
@@ -2092,6 +2552,9 @@ window.addEventListener("focus", () => syncNow(true));
   try{ init = await Store.get(KEY); }catch(e){}
   S = init || S;
   S.steps = S.steps || {}; S.memos = S.memos || {}; S.custom = S.custom || []; S.customSteps = S.customSteps || []; S.calc = S.calc || { ...CALC_DEF };
+  S.timers = S.timers || []; S.dil = S.dil || { ...DIL_DEF };
+  S.phaseNames = S.phaseNames || {}; S.phaseExtra = S.phaseExtra || [];
+  S.catNames = S.catNames || {}; S.catExtra = S.catExtra || [];
   allSteps().forEach(s => { S.steps[s.id] = { ...blank(), ...(S.steps[s.id] || {}) }; });
   render();
   await supaLoad();
