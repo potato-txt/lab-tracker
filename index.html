@@ -2,12 +2,12 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>실험 워크플로우 기록</title>
+<title>실험 프로토콜 · 노트</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f3f1ec">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="실험 기록">
+<meta name="apple-mobile-web-app-title" content="실험 노트">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='38' fill='%233a6b5f'/%3E%3Cpath d='M70 38h40v46l30 52a12 12 0 0 1-10 18H50a12 12 0 0 1-10-18l30-52z' fill='none' stroke='%23fbfaf7' stroke-width='9' stroke-linejoin='round'/%3E%3Cpath d='M58 108h64' stroke='%23fbfaf7' stroke-width='9' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
@@ -38,6 +38,7 @@ h1{margin:1px 0 0;font-size:19px;font-weight:650;letter-spacing:-.01em;white-spa
 .save.error{color:var(--st-fail);border-color:var(--st-fail)}
 .iconbtn{width:var(--tap);height:var(--tap);flex:none;display:flex;align-items:center;justify-content:center;font-size:21px;background:none;border:1px solid var(--line);border-radius:11px;background:var(--card);}
 .tabs{display:flex;gap:2px;margin-top:8px;}
+@media(max-width:600px){h1{font-size:17px}}
 .tab{min-height:var(--tap);padding:0 18px;font-size:15px;font-weight:600;color:var(--ink-soft);background:none;border:none;border-bottom:2.5px solid transparent;}
 .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
 
@@ -114,6 +115,8 @@ main{padding:16px 16px calc(28px + var(--bot));max-width:1400px;margin:0 auto;}
 .proto li:last-child{border-bottom:none}
 .proto li.k-sub{counter-increment:none;background:#eef3f1;font-weight:600;color:var(--accent);padding:8px 12px;border-radius:7px;margin:11px 0 6px;border-bottom:none}
 .proto li.k-sub::before{display:none}
+.proto li.k-lead{counter-increment:none;padding:11px 14px;font-size:15.5px;font-weight:650;color:var(--ink);background:#eef3f1;border-left:4px solid var(--accent);border-radius:7px;border-bottom:none;margin:0 0 12px}
+.proto li.k-lead::before{display:none}
 .proto li.k-item{counter-increment:none;padding:4px 4px 4px 42px;border-bottom:none}
 .proto li.k-item::before{content:"–";border:none;background:none;color:var(--ink-soft);width:auto;height:auto;left:24px;top:4px;font-size:15px}
 .proto li.k-note{counter-increment:none;padding:2px 4px 8px 42px;font-size:14px;color:var(--ink-soft);border-bottom:none}
@@ -260,7 +263,7 @@ select{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);b
   <div class="hrow">
     <div class="htitle">
       <div class="eyebrow">Cloning → Expression → Purification</div>
-      <h1>실험 워크플로우 기록</h1>
+      <h1>실험 프로토콜 · 노트</h1>
     </div>
     <button class="hdtimer hide" id="hdtimer"></button>
     <span class="save" id="save">자동 저장</span>
@@ -410,9 +413,10 @@ const PHASES = [
       },
       {
         id: "tf1",
-        name: "Transformation (colony PCR 이전)",
+        name: "Transformation – cloning host",
         note: "E. coli TOP10 형질전환 → 도말 → overnight",
         protocol: [
+          "> 적용 대상: ligation product, 또는 증폭·보존이 필요한 plasmid/vector.",
           "[준비]",
           "- competent cell: E. coli TOP10",
           "heat block 온도 44℃ 설정 → 다이알을 누른 후 화면 좌측상단이 깜빡거리지 않는지 확인",
@@ -526,7 +530,7 @@ const PHASES = [
     steps: [
       {
         id: "tf2",
-        name: "Transformation (colony PCR 이후)",
+        name: "Transformation – expression host",
         note: "sequencing 검증 → BL21*pLysS 형질전환",
         protocol: [
           "[sequencing 결과 확인]",
@@ -1338,6 +1342,7 @@ const AUTO_HEAD = /^\[\s*(과정|진행|방법|순서)\s*\]$/;
 function parseProtocol(lines){
   return lines.map(l => {
     if(l.startsWith("[")) return { k:"sub",  t:l };
+    if(l.startsWith(">")) return { k:"lead", t:l.replace(/^>\s*/, "") };
     if(l.startsWith("★")) return { k:"warn", t:l };
     if(l.startsWith("(") || l.startsWith("※")) return { k:"note", t:l };
     if(l.startsWith("-")) return { k:"item", t:l.replace(/^-\s*/, "") };
@@ -1710,7 +1715,7 @@ function syncTextarea(){
   if(ta) ta.value = ui.editor.text;
   updatePreview();
 }
-const KEEP = /^[\[※(★]/;   // 소제목·부연·강조는 건드리지 않는다
+const KEEP = /^[\[※(★>]/;   // 소제목·부연·강조는 건드리지 않는다
 function editorView(){
   const e = ui.editor;
   const prep = e.kind === "prep";
@@ -1755,7 +1760,7 @@ function editorView(){
         <b>[소제목]</b> 대괄호로 감싸면 구간 제목<br>
         <b>- 항목</b> 앞에 - 를 붙이면 번호 없는 나열 (재료·조성)<br>
         <b>(설명)</b> 또는 <b>※</b> 로 시작하면 번호 없는 부연<br>
-        <b>★</b> 로 시작하면 빨간 강조<br>
+        <b>★</b> 로 시작하면 빨간 강조, <b>&gt;</b> 로 시작하면 굵은 안내줄<br>
         그 밖의 줄에는 순서 번호가 자동으로 붙습니다.<br>
         위쪽 재료 칸에 넣은 것은 <b>[재료]</b> 아래 나열로 들어가고, 과정과 섞이지 않습니다.<br>
         불러온 문서에 이미 - 가 붙어 있으면 그대로 둡니다. 미리보기에서 줄을 눌러 바꾸세요.
