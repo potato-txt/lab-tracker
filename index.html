@@ -212,6 +212,25 @@ select{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);b
 .note{margin:9px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);line-height:1.6}
 .card2{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px}
 .card2 .field:last-child{margin-bottom:0}
+.badge.run{color:var(--accent);border:1px solid var(--line)}
+.runbox{border:1px solid var(--line);border-radius:11px;margin-bottom:10px;overflow:hidden;background:var(--paper)}
+.runbox.open{border-color:var(--accent);background:var(--card)}
+.runhead{display:flex;align-items:center;gap:9px;width:100%;min-height:var(--tap);padding:10px 13px;font:inherit;font-size:14px;text-align:left;background:none;border:none;cursor:pointer;border-left:4px solid var(--st-todo)}
+.runhead.st-running{border-left-color:var(--st-run)}
+.runhead.st-done{border-left-color:var(--st-done)}
+.runhead.st-failed{border-left-color:var(--st-fail)}
+.runhead.on{background:#eef3f1}
+.rnum{font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--accent)}
+.rdate{font-family:var(--mono);font-size:12.5px}
+.rstat{flex:1;font-size:12.5px;color:var(--ink-soft)}
+.rchev{font-size:10px;color:var(--ink-soft)}
+.runbody{padding:4px 14px 14px;border-top:1px solid var(--line)}
+.runbody .field:last-child{margin-bottom:0}
+.tr .f input[type=date]{max-width:190px}
+.tgrid3{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px}
+.tgrid3 label{display:block;font-size:12.5px;color:var(--ink-soft);margin-bottom:5px}
+.tgrid3 input{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:0 12px}
+@media(max-width:520px){.tgrid3{grid-template-columns:1fr 1fr}.tgrid3>div:last-child{grid-column:1/-1}}
 .tcard{border:1px solid var(--line);border-left:4px solid var(--st-todo);border-radius:11px;padding:13px;margin-top:12px;background:var(--paper)}
 .tcard.run{border-left-color:var(--st-run);background:#fbf3e4}
 .tcard.done{border-left-color:var(--st-done);background:#e9f4ee}
@@ -1073,7 +1092,7 @@ const Store = (() => {
 })();
 
 const KEY  = "lab_tracker_state";
-const PKEY = id => "lab_pic_" + id;
+const PKEY = (stepId, runId) => "lab_pic_" + stepId + ((runId && runId !== "legacy") ? "_" + runId : "");
 const PIC_LIMIT = 4_500_000;
 
 
@@ -1213,7 +1232,8 @@ async function syncNow(silent){
         await Store.set(r.k, r.v); meta[r.k] = rt; pulled++;
       }
     }
-    const keys = [KEY, ...allSteps().map(x => PKEY(x.id))];
+    const keys = [KEY];
+    allSteps().forEach(x => stepEntry(x.id).runs.forEach(r => keys.push(PKEY(x.id, r.id))));
     for(const k of keys){
       const lt = meta[k] || 0;
       const rt = rmap[k] ? new Date(rmap[k].updated_at).getTime() : 0;
@@ -1240,7 +1260,7 @@ async function syncNow(silent){
   S.timers = S.timers || []; S.dil = S.dil || { ...DIL_DEF };
   S.phaseNames = S.phaseNames || {}; S.phaseExtra = S.phaseExtra || [];
   S.catNames = S.catNames || {}; S.catExtra = S.catExtra || [];
-        allSteps().forEach(x => { S.steps[x.id] = { ...blank(), ...(S.steps[x.id] || {}) }; });
+        allSteps().forEach(x => stepEntry(x.id));
       }
       pics = {};
       render();
@@ -1254,10 +1274,41 @@ async function syncNow(silent){
 
 /* ══ 상태 ══ */
 let S = { steps:{}, current:null, memos:{}, custom:[], customSteps:[], calc:null, timers:[], dil:null, phaseNames:{}, phaseExtra:[], catNames:{}, catExtra:[] };
-let ui = { tab:"flow", step:PHASES[0].steps[0].id, recipe:RECIPES[0].id, detail:false, showProto:true, picErr:"", busy:false, editor:null, impErr:"", groups:null, tmin:"", tname:"", tool:"timer" };
+let ui = { tab:"flow", step:PHASES[0].steps[0].id, recipe:RECIPES[0].id, detail:false, showProto:true, picErr:"", busy:false, editor:null, impErr:"", groups:null, run:null, tmin:"", tsec:"", tname:"", tool:"timer" };
 let pics = {};
 
-const blank = () => ({ status:"todo", date:"", result:"", trouble:[], photoN:0 });
+/* 한 단계를 여러 번 시행할 수 있으므로 기록을 회차(run) 배열로 둔다.
+   예전 형식({status,date,result,...})은 첫 회차로 옮긴다. */
+const newRun = () => ({ id:"r" + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+                        date:"", status:"todo", result:"", trouble:[], photoN:0 });
+const blank = () => ({ runs:[newRun()] });
+function stepEntry(id){
+  let e = S.steps[id];
+  if(!e || !Array.isArray(e.runs)){
+    const had = e && (e.status && e.status !== "todo" || e.date || e.result || (e.trouble || []).length || e.photoN);
+    e = { runs:[ had
+      ? { id:"legacy", date:e.date || "", status:e.status || "todo", result:e.result || "",
+          trouble:(e.trouble || []).map(t => ({ date:"", ...t })), photoN:e.photoN || 0 }
+      : newRun() ] };
+    S.steps[id] = e;
+  }
+  if(!e.runs.length) e.runs.push(newRun());
+  e.runs.forEach(r => { r.trouble = (r.trouble || []).map(t => ({ date:"", ...t })); });
+  return e;
+}
+function stepStatus(id){
+  const st = stepEntry(id).runs.map(r => r.status);
+  return st.includes("done") ? "done" : st.includes("running") ? "running"
+       : st.includes("failed") ? "failed" : "todo";
+}
+function stepSum(id, key){ return stepEntry(id).runs.reduce((n, r) => n + (key === "pic" ? (r.photoN || 0) : (r.trouble || []).length), 0); }
+function runOf(id){
+  const e = stepEntry(id);
+  return e.runs.find(r => r.id === ui.run) || e.runs[e.runs.length - 1];
+}
+function runLabel(r, i){
+  return `#${i + 1}` + (r.date ? " · " + r.date : "") + " · " + (STATUSES.find(x => x.id === r.status) || STATUSES[0]).label;
+}
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
 let saveTimer = null;
@@ -1273,7 +1324,12 @@ async function save(){
   try{ await Store.set(KEY, S); await touch(KEY); flag("saved"); }
   catch(e){ flag("error"); }
 }
-function patch(id, obj){ S.steps[id] = { ...S.steps[id], ...obj }; save(); render(); }
+function patchRun(stepId, runId, obj){
+  const e = stepEntry(stepId);
+  const r = e.runs.find(x => x.id === runId) || runOf(stepId);
+  Object.assign(r, obj);
+  save(); render();
+}
 
 /* ══ 프로토콜 줄 해석 ══
    "-" 로 시작하는 줄만 번호 없는 나열이 된다. 소제목 아래라고 해서 자동으로 나열이 되지는 않는다. */
@@ -1519,30 +1575,31 @@ async function shrink(file){
     return out.length < raw.length ? out : raw;
   }catch(e){ return raw; }
 }
-async function loadPics(id){
-  if(pics[id] !== undefined) return;
-  try{ pics[id] = (await Store.get(PKEY(id))) || []; }
-  catch(e){ pics[id] = []; }
+async function loadPics(sid, rid){
+  const k = PKEY(sid, rid);
+  if(pics[k] !== undefined) return;
+  try{ pics[k] = (await Store.get(k)) || []; }
+  catch(e){ pics[k] = []; }
   render();
 }
-async function savePics(id, arr){
-  const size = JSON.stringify(arr).length;
-  if(size > PIC_LIMIT){
-    ui.picErr = "이 단계의 사진 용량이 한도를 넘습니다. 오래된 사진을 지우고 다시 넣어 주세요.";
+async function savePics(sid, rid, arr){
+  if(JSON.stringify(arr).length > PIC_LIMIT){
+    ui.picErr = "이 회차의 사진 용량이 한도를 넘습니다. 오래된 사진을 지우고 다시 넣어 주세요.";
     render(); return false;
   }
-  pics[id] = arr;
+  const k = PKEY(sid, rid);
+  pics[k] = arr;
   ui.picErr = "";
   flag("saving");
-  try{ await Store.set(PKEY(id), arr); await touch(PKEY(id)); flag("saved"); }
+  try{ await Store.set(k, arr); await touch(k); flag("saved"); }
   catch(e){
     flag("error");
     ui.picErr = "저장 공간이 부족합니다. 사진을 줄이거나 백업 후 정리해 주세요.";
   }
-  patch(id, { photoN: arr.length });
+  patchRun(sid, rid, { photoN: arr.length });
   return true;
 }
-async function addPics(id, fileList){
+async function addPics(sid, rid, fileList){
   const picked = Array.from(fileList || []);
   const files = picked.filter(f => f.type && f.type.startsWith("image/"));
   if(!files.length){ ui.picErr = picked.length ? "이미지 파일만 넣을 수 있습니다." : "고른 파일이 없습니다."; render(); return; }
@@ -1552,7 +1609,7 @@ async function addPics(id, fileList){
     for(const f of files){
       made.push({ id: Date.now() + "_" + Math.random().toString(36).slice(2,7), name:f.name, caption:"", data: await shrink(f) });
     }
-    await savePics(id, [...(pics[id] || []), ...made]);
+    await savePics(sid, rid, [...(pics[PKEY(sid, rid)] || []), ...made]);
   }catch(e){ ui.picErr = e.message || "사진을 넣지 못했습니다."; }
   ui.busy = false; render();
 }
@@ -1576,9 +1633,12 @@ async function importDoc(file){
 /* ══ 백업 ══ */
 async function exportAll(){
   const out = { v:1, at:new Date().toISOString(), state:S, pics:{} };
-  for(const s of allSteps()){
-    const arr = pics[s.id] !== undefined ? pics[s.id] : await Store.get(PKEY(s.id));
-    if(arr && arr.length) out.pics[s.id] = arr;
+  for(const st of allSteps()){
+    for(const r of stepEntry(st.id).runs){
+      const k = PKEY(st.id, r.id);
+      const arr = pics[k] !== undefined ? pics[k] : await Store.get(k);
+      if(arr && arr.length) out.pics[k] = arr;
+    }
   }
   const blob = new Blob([JSON.stringify(out)], { type:"application/json" });
   const a = document.createElement("a");
@@ -1593,10 +1653,12 @@ async function importAll(file){
   if(!obj || !obj.state) throw new Error("형식이 맞지 않는 파일입니다");
   S = obj.state;
   S.customSteps = S.customSteps || [];
-  allSteps().forEach(s => { S.steps[s.id] = { ...blank(), ...(S.steps[s.id] || {}) }; });
+  allSteps().forEach(s => stepEntry(s.id));
   await Store.set(KEY, S);
   pics = {};
-  for(const [id, arr] of Object.entries(obj.pics || {})) await Store.set(PKEY(id), arr);
+  for(const [k, arr] of Object.entries(obj.pics || {})){
+    await Store.set(/^lab_pic_/.test(k) ? k : "lab_pic_" + k, arr);   // 예전 백업은 단계 id 만 들어 있다
+  }
   render();
 }
 
@@ -1949,12 +2011,16 @@ function tick(){
   if(finished){ beep(); save(); render(); }
 }
 const PRESETS = [
-  ["1분", 1], ["5분", 5], ["10분", 10], ["15분", 15],
-  ["20분", 20], ["30분", 30], ["1시간", 60], ["2시간", 120],
+  ["30초", 30], ["1분", 60], ["1분 20초", 80], ["3분", 180], ["5분", 300],
+  ["10분", 600], ["15분", 900], ["20분", 1200], ["30분", 1800], ["1시간", 3600], ["2시간", 7200],
 ];
-function addTimer(min, name){
-  const t = { id:"t"+Date.now(), name:name || (min ? min + "분 타이머" : "스톱워치"),
-              mode: min ? "down" : "up", ms:(min || 0) * 60000,
+function secLabel(sec){
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s2 = Math.round(sec % 60);
+  return [h ? h + "시간" : "", m ? m + "분" : "", s2 ? s2 + "초" : ""].filter(Boolean).join(" ") || "0초";
+}
+function addTimer(sec, name){
+  const t = { id:"t"+Date.now(), name:name || (sec ? secLabel(sec) + " 타이머" : "스톱워치"),
+              mode: sec ? "down" : "up", ms:Math.round((sec || 0) * 1000),
               startedAt:Date.now(), elapsed:0, done:false };
   S.timers = (S.timers || []).concat(t);
   beep(); if(audioCtx && audioCtx.state === "running"){ /* 소리 권한 확보용 */ }
@@ -1968,11 +2034,13 @@ function timerHTML(){
       ${PRESETS.map(([lb, m]) => `<button class="chip" data-act="tadd" data-m="${m}">${lb}</button>`).join("")}
       <button class="chip" data-act="tadd" data-m="0">스톱워치</button>
     </div>
-    <div class="calcgrid" style="margin-bottom:14px">
-      <div><label for="tmin">직접 입력 <span class="cu">분</span></label>
-        <input id="tmin" type="text" inputmode="decimal" placeholder="예: 90" data-act="tmin" value="${esc(ui.tmin || "")}"></div>
-      <div><label for="tnm">이름</label>
-        <input id="tnm" type="text" placeholder="예: R.E cut" data-act="tname-new" value="${esc(ui.tname || "")}"></div>
+    <div class="tgrid3" style="margin-bottom:14px">
+      <div><label for="tmin">분</label>
+        <input id="tmin" type="text" inputmode="numeric" placeholder="0" data-act="tmin" value="${esc(ui.tmin || "")}"></div>
+      <div><label for="tsec">초</label>
+        <input id="tsec" type="text" inputmode="numeric" placeholder="0" data-act="tsec" value="${esc(ui.tsec || "")}"></div>
+      <div><label for="tnm">이름 <span class="cu">선택</span></label>
+        <input id="tnm" type="text" placeholder="예: sonication" data-act="tname-new" value="${esc(ui.tname || "")}"></div>
     </div>
     <button class="addbtn" data-act="tadd-custom">＋ 타이머 시작</button>
     ${list.length === 0 ? `<p class="empty" style="margin-top:14px">돌아가는 타이머가 없습니다. 위에서 하나 고르세요.</p>` : ""}
@@ -1982,7 +2050,7 @@ function timerHTML(){
         <button class="x" data-act="tdel" data-id="${t.id}" title="삭제">×</button>
       </div>
       <div class="tclock" data-t="${t.id}">${fmtMs(timerShown(t))}</div>
-      <div class="tmeta">${t.mode === "down" ? fmtMs(t.ms) + " 카운트다운" : "경과 시간"}${t.done?" · 끝났습니다":""}</div>
+      <div class="tmeta">${t.mode === "down" ? fmtMs(t.ms) + " 카운트다운" : "경과 시간 (스톱워치)"}${t.done?" · 끝났습니다":""}</div>
       <div class="chips">
         <button class="chip" data-act="ttoggle" data-id="${t.id}">${t.startedAt?"일시정지":(t.done?"다시 시작":"시작")}</button>
         <button class="chip" data-act="treset" data-id="${t.id}">초기화</button>
@@ -2006,7 +2074,7 @@ function viewFlow(){
   if(ui.groups === "flow") return groupsView();
   if(ui.editor && ui.editor.kind !== "prep") return editorView();
   const steps = allSteps();
-  const done = steps.filter(s => S.steps[s.id] && S.steps[s.id].status === "done").length;
+  const done = steps.filter(s => stepStatus(s.id) === "done").length;
   const pct  = steps.length ? Math.round(done / steps.length * 100) : 0;
   const cur  = S.current ? STEP(S.current) : null;
 
@@ -2017,29 +2085,75 @@ function viewFlow(){
     : `<div class="now"><span class="empty">진행 중인 단계가 없습니다 — 단계를 열어 “지금 여기 진행 중”을 눌러 표시하세요.</span></div>`;
 
   const list = phaseList().map(p => `<div class="group"><h2>${esc(p.label)}</h2>` + p.steps.map(s => {
-    const e = S.steps[s.id];
-    return `<button class="node st-${e.status} ${ui.step===s.id?"on":""} ${S.current===s.id?"cur":""}" data-act="open" data-id="${s.id}">
+    const e = stepEntry(s.id), nPic = stepSum(s.id, "pic"), nTr = stepSum(s.id, "tr");
+    return `<button class="node st-${stepStatus(s.id)} ${ui.step===s.id?"on":""} ${S.current===s.id?"cur":""}" data-act="open" data-id="${s.id}">
       <span class="sdot"></span><span class="nm">${esc(s.name)}</span>
       ${S.current===s.id?'<span class="badge here">지금</span>':""}
-      ${e.photoN>0?`<span class="badge pic">▤${e.photoN}</span>`:""}
-      ${e.trouble.length?`<span class="badge flag">⚑${e.trouble.length}</span>`:""}
+      ${e.runs.length>1?`<span class="badge run">${e.runs.length}회</span>`:""}
+      ${nPic>0?`<span class="badge pic">▤${nPic}</span>`:""}
+      ${nTr>0?`<span class="badge flag">⚑${nTr}</span>`:""}
     </button>`;
   }).join("") + (p.steps.length ? "" : `<p class="empty" style="margin:0 0 8px">비어 있음</p>`) + "</div>").join("")
     + `<button class="addnode" data-act="ed-new">＋ 프로토콜 파일 추가</button>`
     + `<button class="addnode" data-act="gmanage" data-id="flow">묶음 관리</button>`;
 
-  const st = STEP(ui.step), e = S.steps[ui.step];
+  const st = STEP(ui.step), e = stepEntry(ui.step);
   const proto = ui.showProto
     ? `<ol class="proto">${parseProtocol(st.protocol).map(l => `<li class="k-${l.k}">${esc(l.t)}</li>`).join("")}</ol>` : "";
+  const open = runOf(ui.step);
 
-  const arr = pics[ui.step];
-  const picBody = arr === undefined ? `<p class="empty">사진 불러오는 중…</p>`
-    : arr.length === 0 ? `<p class="empty">아직 사진이 없습니다.</p>`
-    : `<div class="pics">` + arr.map(p => `<figure class="pic">
-          <button class="thumb" data-act="zoom" data-id="${p.id}"><img src="${p.data}" alt="${esc(p.caption||p.name)}"></button>
-          <button class="x" data-act="delpic" data-id="${p.id}">×</button>
-          <figcaption><input type="text" placeholder="설명 (예: lane 3 밴드 약함)" value="${esc(p.caption)}" data-act="cap" data-id="${p.id}"></figcaption>
-        </figure>`).join("") + `</div>`;
+  const runCard = (r, i) => {
+    const isOpen = r.id === open.id;
+    const nPic = r.photoN || 0, nTr = (r.trouble || []).length;
+    const head = `<button class="runhead ${isOpen?"on":""} st-${r.status}" data-act="run" data-id="${r.id}">
+      <span class="sdot"></span>
+      <span class="rnum">#${i + 1}</span>
+      <span class="rdate">${r.date ? esc(r.date) : "날짜 없음"}</span>
+      <span class="rstat">${esc((STATUSES.find(x => x.id === r.status) || STATUSES[0]).label)}</span>
+      ${nPic?`<span class="badge pic">▤${nPic}</span>`:""}
+      ${nTr?`<span class="badge flag">⚑${nTr}</span>`:""}
+      <span class="rchev">${isOpen?"▲":"▼"}</span>
+    </button>`;
+    if(!isOpen) return `<div class="runbox">${head}</div>`;
+
+    const arr = pics[PKEY(ui.step, r.id)];
+    const picBody = arr === undefined ? `<p class="empty">사진 불러오는 중…</p>`
+      : arr.length === 0 ? `<p class="empty">아직 사진이 없습니다.</p>`
+      : `<div class="pics">` + arr.map(p => `<figure class="pic">
+            <button class="thumb" data-act="zoom" data-id="${p.id}"><img src="${p.data}" alt="${esc(p.caption||p.name)}"></button>
+            <button class="x" data-act="delpic" data-id="${p.id}">×</button>
+            <figcaption><input type="text" placeholder="설명 (예: lane 3 밴드 약함)" value="${esc(p.caption)}" data-act="cap" data-id="${p.id}"></figcaption>
+          </figure>`).join("") + `</div>`;
+
+    return `<div class="runbox open">${head}
+      <div class="runbody">
+        <div class="field"><span class="flabel">상태</span><div class="chips">${statusChips(ui.step, r.status)}</div></div>
+        <div class="field"><label for="dt">실험 날짜</label>
+          <input id="dt" type="date" value="${esc(r.date)}" data-act="date"></div>
+        <div class="field"><label for="rs">결과 기록</label>
+          <textarea id="rs" rows="6" placeholder="농도, 밴드 크기, OD값, gel 결과, 조건 변경 등 자유롭게 기록" data-act="result">${esc(r.result)}</textarea></div>
+        <div class="field"><span class="flabel">결과 사진</span>
+          <div class="drop" id="drop">
+            <button class="picbtn" ${ui.busy?"disabled":""} data-act="pick">${ui.busy?"넣는 중…":"사진 고르기"}</button>
+            <input type="file" id="picinput" accept="image/*" multiple>
+            <span class="drophint">gel · plate · 그래프 사진</span>
+          </div>
+          ${ui.picErr?`<p class="picerr">${esc(ui.picErr)}</p>`:""}
+          ${picBody}
+        </div>
+        <div class="field"><div class="frow"><label>트러블슈팅 기록</label>
+          <button class="addbtn" data-act="addtr">+ 항목 추가</button></div>
+          ${(r.trouble || []).length ? r.trouble.map((t, n) => `<div class="tr"><div class="n">#${n + 1}</div><div class="f">
+            <input type="date" value="${esc(t.date || "")}" data-act="tr" data-id="${t.id}" data-f="date" title="날짜 (선택)">
+            <input type="text" placeholder="증상 / 문제 (예: 밴드가 안 나옴)" value="${esc(t.problem)}" data-act="tr" data-id="${t.id}" data-f="problem">
+            <input type="text" placeholder="추정 원인 (예: annealing 온도 높음)" value="${esc(t.cause)}" data-act="tr" data-id="${t.id}" data-f="cause">
+            <input type="text" placeholder="해결 / 조치 (예: Tm 2℃ 낮춰 재진행)" value="${esc(t.fix)}" data-act="tr" data-id="${t.id}" data-f="fix">
+          </div><button class="x" data-act="deltr" data-id="${t.id}">×</button></div>`).join("")
+          : `<p class="empty">아직 기록이 없습니다. 문제가 생기면 원인·해결을 남겨 다음 실험에 참고하세요. 날짜는 넣지 않아도 저장됩니다.</p>`}
+        </div>
+        ${e.runs.length > 1 ? `<button class="delbtn" data-act="delrun" data-id="${r.id}">이 회차 삭제</button>` : ""}
+      </div></div>`;
+  };
 
   const detail = `<div class="detail">
     <div class="dhead">
@@ -2053,34 +2167,16 @@ function viewFlow(){
     <div class="field"><div class="frow"><label>실험 방법</label>
       <button class="toggle" data-act="toggleproto">${ui.showProto?"접기 ▲":"펼치기 ▼"}</button></div>${proto}</div>
     ${TOOLS[st.id] === "ligation" ? ligHTML() : ""}
-    <div class="field"><span class="flabel">상태</span><div class="chips">${statusChips(st.id, e.status)}</div></div>
-    <div class="field"><label for="dt">실험 날짜</label>
-      <input id="dt" type="date" value="${esc(e.date)}" data-act="date"></div>
-    <div class="field"><label for="rs">결과 기록</label>
-      <textarea id="rs" rows="6" placeholder="농도, 밴드 크기, OD값, gel 결과, 조건 변경 등 자유롭게 기록" data-act="result">${esc(e.result)}</textarea></div>
-    <div class="field"><span class="flabel">결과 사진</span>
-      <div class="drop" id="drop">
-        <button class="picbtn" ${ui.busy?"disabled":""} data-act="pick">${ui.busy?"넣는 중…":"사진 고르기"}</button>
-        <input type="file" id="picinput" accept="image/*" multiple>
-        <span class="drophint">gel · plate · 그래프 사진</span>
-      </div>
-      ${ui.picErr?`<p class="picerr">${esc(ui.picErr)}</p>`:""}
-      ${picBody}
-    </div>
-    <div class="field"><div class="frow"><label>트러블슈팅 기록</label>
-      <button class="addbtn" data-act="addtr">+ 항목 추가</button></div>
-      ${e.trouble.length? e.trouble.map((t,i)=>`<div class="tr"><div class="n">#${i+1}</div><div class="f">
-        <input type="text" placeholder="증상 / 문제 (예: 밴드가 안 나옴)" value="${esc(t.problem)}" data-act="tr" data-id="${t.id}" data-f="problem">
-        <input type="text" placeholder="추정 원인 (예: annealing 온도 높음)" value="${esc(t.cause)}" data-act="tr" data-id="${t.id}" data-f="cause">
-        <input type="text" placeholder="해결 / 조치 (예: Tm 2℃ 낮춰 재진행)" value="${esc(t.fix)}" data-act="tr" data-id="${t.id}" data-f="fix">
-      </div><button class="x" data-act="deltr" data-id="${t.id}">×</button></div>`).join("")
-      : `<p class="empty">아직 기록이 없습니다. 문제가 생기면 원인·해결을 남겨 다음 실험에 참고하세요.</p>`}
+    <div class="field">
+      <div class="frow"><label>시행 기록 · ${e.runs.length}회</label>
+        <button class="addbtn" data-act="addrun">＋ 회차 추가</button></div>
+      ${e.runs.map(runCard).join("")}
     </div>
   </div>`;
 
   return banner
     + `<div class="bar"><i style="width:${pct}%"></i><span>${done}/${steps.length} 단계 완료 · ${pct}%</span></div>`
-    + `<div class="legend">` + STATUSES.map(s => `<b><i style="background:${s.dot}"></i>${s.label} ${steps.filter(x=>S.steps[x.id]&&S.steps[x.id].status===s.id).length}</b>`).join("") + `</div>`
+    + `<div class="legend">` + STATUSES.map(s => `<b><i style="background:${s.dot}"></i>${s.label} ${steps.filter(x=>stepStatus(x.id)===s.id).length}</b>`).join("") + `</div>`
     + `<div class="split ${ui.detail?"detail-mode":""}">
          <div class="pane-list">${list}</div>
          <div class="pane-detail"><button class="backbtn" data-act="back">‹ 목록</button>${detail}</div>
@@ -2153,7 +2249,7 @@ function render(){
     const n = app.querySelector(sel);
     if(n && n.focus){ n.focus(); if(keep.pos != null){ try{ n.setSelectionRange(keep.pos, keep.pos); }catch(e){} } }
   }
-  if(ui.tab === "flow") loadPics(ui.step);
+  if(ui.tab === "flow" && ui.run){ const r = runOf(ui.step); if(r) loadPics(ui.step, r.id); }
   ensureTick();
   updateHeaderTimer();
 }
@@ -2167,25 +2263,51 @@ document.querySelector(".tabs").addEventListener("click", e => {
 document.getElementById("app").addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if(!b) return;
   const a = b.dataset.act, id = b.dataset.id;
-  if(a === "open"){ ui.step = id; ui.detail = true; ui.picErr = ""; render(); window.scrollTo(0,0); }
+  if(a === "open"){
+    ui.step = id; ui.detail = true; ui.picErr = "";
+    const rs = stepEntry(id).runs; ui.run = rs[rs.length - 1].id;
+    render(); window.scrollTo(0,0);
+  }
+  else if(a === "run"){ ui.run = (ui.run === id ? null : id); ui.picErr = ""; render(); }
+  else if(a === "addrun"){
+    const e = stepEntry(ui.step), r = newRun();
+    const last = e.runs[e.runs.length - 1];
+    r.status = "todo";
+    e.runs.push(r); ui.run = r.id; ui.picErr = "";
+    save(); render();
+  }
+  else if(a === "delrun"){
+    const e = stepEntry(ui.step);
+    if(e.runs.length <= 1) return;
+    Store.del(PKEY(ui.step, id)); delete pics[PKEY(ui.step, id)];
+    e.runs = e.runs.filter(r => r.id !== id);
+    ui.run = e.runs[e.runs.length - 1].id;
+    save(); render();
+  }
   else if(a === "openr"){ ui.recipe = id; ui.detail = true; render(); window.scrollTo(0,0); }
   else if(a === "back"){ ui.detail = false; render(); }
   else if(a === "here"){ S.current = S.current === id ? null : id; save(); render(); }
-  else if(a === "status"){ patch(id, { status:b.dataset.v }); }
+  else if(a === "status"){ patchRun(ui.step, runOf(ui.step).id, { status:b.dataset.v }); }
   else if(a === "toggleproto"){ ui.showProto = !ui.showProto; render(); }
-  else if(a === "addtr"){ patch(ui.step, { trouble:[...S.steps[ui.step].trouble, { id:Date.now(), problem:"", cause:"", fix:"" }] }); }
-  else if(a === "deltr"){ patch(ui.step, { trouble:S.steps[ui.step].trouble.filter(t => String(t.id) !== id) }); }
+  else if(a === "addtr"){
+    const r = runOf(ui.step);
+    patchRun(ui.step, r.id, { trouble:[...(r.trouble || []), { id:Date.now(), date:"", problem:"", cause:"", fix:"" }] });
+  }
+  else if(a === "deltr"){
+    const r = runOf(ui.step);
+    patchRun(ui.step, r.id, { trouble:(r.trouble || []).filter(t => String(t.id) !== id) });
+  }
   else if(a === "pick"){ document.getElementById("picinput").click(); }
-  else if(a === "delpic"){ savePics(ui.step, (pics[ui.step]||[]).filter(p => p.id !== id)); }
-  else if(a === "zoom"){ const p = (pics[ui.step]||[]).find(x => x.id === id); if(p) lightbox(p); }
+  else if(a === "delpic"){ const r = runOf(ui.step); savePics(ui.step, r.id, (pics[PKEY(ui.step, r.id)]||[]).filter(p => p.id !== id)); }
+  else if(a === "zoom"){ const r = runOf(ui.step); const p = (pics[PKEY(ui.step, r.id)]||[]).find(x => x.id === id); if(p) lightbox(p); }
   else if(a === "tool"){ ui.tool = id; render(); window.scrollTo(0,0); }
   else if(a === "dil-mode"){ D().mode = b.dataset.m; save(); render(); }
   else if(a === "tadd"){ addTimer(+b.dataset.m, +b.dataset.m ? null : "스톱워치"); }
   else if(a === "tadd-custom"){
-    const m = parseFloat(ui.tmin);
-    if(!isFinite(m) || m <= 0){ ui.tmin = ""; addTimer(0, ui.tname || "스톱워치"); }
-    else addTimer(m, ui.tname || (m + "분 타이머"));
-    ui.tmin = ""; ui.tname = ""; render();
+    const m = parseFloat(ui.tmin) || 0, sc = parseFloat(ui.tsec) || 0;
+    const total = m * 60 + sc;
+    addTimer(total > 0 ? total : 0, ui.tname || null);
+    ui.tmin = ""; ui.tsec = ""; ui.tname = ""; render();
   }
   else if(a === "ttoggle"){
     const t = (S.timers || []).find(x => x.id === id);
@@ -2259,10 +2381,13 @@ document.getElementById("app").addEventListener("click", e => {
       save(); render(); return;
     }
     const eid = ui.editor.id;
+    stepEntry(eid).runs.forEach(r => {                  // 회차마다 사진이 따로 저장되므로 전부 지운다
+      const k = PKEY(eid, r.id);
+      Store.del(k); delete pics[k];
+    });
     S.customSteps = S.customSteps.filter(x => x.id !== eid);
     delete S.steps[eid];
     if(S.current === eid) S.current = null;
-    Store.del(PKEY(eid)); delete pics[eid];
     ui.editor = null; ui.step = PHASES[0].steps[0].id; ui.detail = false;
     save(); render();
   }
@@ -2310,11 +2435,11 @@ document.getElementById("app").addEventListener("click", e => {
 
 document.getElementById("app").addEventListener("input", e => {
   const t = e.target, a = t.dataset.act; if(!a) return;
-  if(a === "date")   { S.steps[ui.step].date = t.value; save(); }
-  else if(a === "result") { S.steps[ui.step].result = t.value; save(); }
+  if(a === "date")   { runOf(ui.step).date = t.value; save(); }
+  else if(a === "result") { runOf(ui.step).result = t.value; save(); }
   else if(a === "memo")   { S.memos[t.dataset.id] = t.value; save(); }
   else if(a === "tr"){
-    const tr = S.steps[ui.step].trouble.find(x => String(x.id) === t.dataset.id);
+    const tr = (runOf(ui.step).trouble || []).find(x => String(x.id) === t.dataset.id);
     if(tr){ tr[t.dataset.f] = t.value; save(); }
   }
   else if(a === "ed-name"){ ui.editor.name = t.value; }
@@ -2333,6 +2458,7 @@ document.getElementById("app").addEventListener("input", e => {
     save(); updateDilOut();
   }
   else if(a === "tmin"){ ui.tmin = t.value; }
+  else if(a === "tsec"){ ui.tsec = t.value; }
   else if(a === "tname-new"){ ui.tname = t.value; }
   else if(a === "tname"){
     const tm = (S.timers || []).find(x => x.id === t.dataset.id);
@@ -2350,10 +2476,11 @@ document.getElementById("app").addEventListener("input", e => {
     save();
   }
   else if(a === "cap"){
-    const arr = (pics[ui.step]||[]).map(p => p.id === t.dataset.id ? { ...p, caption:t.value } : p);
+    const r = runOf(ui.step), k = PKEY(ui.step, r.id);
+    const arr = (pics[k]||[]).map(p => p.id === t.dataset.id ? { ...p, caption:t.value } : p);
     clearTimeout(window.__capT);
-    pics[ui.step] = arr;
-    window.__capT = setTimeout(() => savePics(ui.step, arr), 500);
+    pics[k] = arr;
+    window.__capT = setTimeout(() => savePics(ui.step, r.id, arr), 500);
   }
 });
 
@@ -2372,7 +2499,7 @@ document.getElementById("app").addEventListener("change", e => {
   }
   if(e.target.id === "picinput"){
     const el = e.target, files = Array.from(el.files || []);
-    addPics(ui.step, files).then(() => { el.value = ""; });
+    addPics(ui.step, runOf(ui.step).id, files).then(() => { el.value = ""; });
   }
 });
 
@@ -2388,7 +2515,7 @@ document.getElementById("app").addEventListener("drop", e => {
   if(i){ e.preventDefault(); i.classList.remove("over"); const f = (e.dataTransfer.files||[])[0]; if(f) importDoc(f); return; }
   const d = e.target.closest("#drop"); if(!d) return;
   e.preventDefault(); d.classList.remove("over");
-  addPics(ui.step, e.dataTransfer.files);
+  addPics(ui.step, runOf(ui.step).id, e.dataTransfer.files);
 });
 
 function lightbox(p){
@@ -2555,7 +2682,7 @@ window.addEventListener("focus", () => syncNow(true));
   S.timers = S.timers || []; S.dil = S.dil || { ...DIL_DEF };
   S.phaseNames = S.phaseNames || {}; S.phaseExtra = S.phaseExtra || [];
   S.catNames = S.catNames || {}; S.catExtra = S.catExtra || [];
-  allSteps().forEach(s => { S.steps[s.id] = { ...blank(), ...(S.steps[s.id] || {}) }; });
+  allSteps().forEach(s => stepEntry(s.id));
   render();
   await supaLoad();
   syncNow(true);
