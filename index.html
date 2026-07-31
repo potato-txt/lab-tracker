@@ -216,6 +216,14 @@ select{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);b
 .card2{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px}
 .card2 .field:last-child{margin-bottom:0}
 .badge.run{color:var(--accent);border:1px solid var(--line)}
+.mixt td{padding:6px 8px}
+.mixt td:first-child{white-space:nowrap}
+.mixt .mixdef{font-family:var(--mono);font-size:13px;color:var(--ink-soft);white-space:nowrap}
+.mixt input{width:100%;min-height:40px;font-size:15px;background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:0 9px;font-variant-numeric:tabular-nums}
+.mixt td:last-child{width:38px;padding:0}
+.mixt .x{width:34px;height:34px;font-size:18px;color:var(--ink-soft);background:none;border:none;border-radius:8px}
+.mixsum{margin:11px 0 0;font-family:var(--mono);font-size:13px;font-weight:600;color:var(--st-done)}
+.mixsum.off{color:var(--st-fail)}
 .runbox{border:1px solid var(--line);border-radius:11px;margin-bottom:10px;overflow:hidden;background:var(--paper)}
 .runbox.open{border-color:var(--accent);background:var(--card)}
 .runhead{display:flex;align-items:center;gap:9px;width:100%;min-height:var(--tap);padding:10px 13px;font:inherit;font-size:14px;text-align:left;background:none;border:none;cursor:pointer;border-left:4px solid var(--st-todo)}
@@ -1946,6 +1954,74 @@ function updateDilOut(){
   if(el) el.innerHTML = dilOutHTML();
 }
 
+
+/* ══ 조성 기록 ══
+   기본 조성은 그대로 두고, 회차마다 실제로 넣은 양을 옆 칸에 적는다.
+   빈 칸은 기본값대로 넣은 것으로 보고 합계에 반영한다. */
+const MIXES = {
+  pcr:  { title:"총 25 µl 고정", unit:"µl", total:25, rows:[
+    ["ADW","17.6"], ["5X HF buffer","5"], ["template DNA","1"], ["dNTPs","0.5"],
+    ["primer f","0.3"], ["primer r","0.3"], ["polymerase","0.3"]] },
+  cpcr: { title:"colony 1개당 5 µl", unit:"µl", total:5, rows:[
+    ["primer f","0.3"], ["primer r","0.3"], ["mastermix","2.5"], ["ADW","1.9"]] },
+  re:   { title:"총 20 µl · 같은 buffer 기준", unit:"µl", total:20, rows:[
+    ["buffer","2"], ["R.E #1","0.5"], ["R.E #2","0.5"], ["target DNA","17"]] },
+};
+function mixOf(r){ return (r.mix = r.mix || { vals:{}, extra:[] }); }
+function mixSum(stepId, r){
+  const m = MIXES[stepId]; if(!m) return null;
+  const mix = mixOf(r);
+  let sum = 0, filled = false;
+  m.rows.forEach(([n, d]) => {
+    const v = mix.vals[n];
+    const used = (v !== undefined && String(v).trim() !== "") ? v : d;
+    if(v !== undefined && String(v).trim() !== "") filled = true;
+    const x = parseFloat(used); if(isFinite(x)) sum += x;
+  });
+  (mix.extra || []).forEach(e => {
+    const x = parseFloat(e.amount); if(isFinite(x)){ sum += x; filled = true; }
+  });
+  return { sum, filled };
+}
+function mixSumHTML(stepId, r){
+  const m = MIXES[stepId], res = mixSum(stepId, r);
+  if(!res) return "";
+  const diff = res.sum - m.total;
+  const off = Math.abs(diff) > 0.05;
+  return `<p class="mixsum ${off?"off":""}">합계 ${+res.sum.toFixed(3)} ${m.unit} · 목표 ${m.total} ${m.unit}
+    ${off ? `· ${diff > 0 ? "+" : ""}${+diff.toFixed(3)} ${m.unit} 차이` : "· 맞음"}</p>
+    <p class="stat">빈 칸은 기본값대로 넣은 것으로 계산합니다. 시약을 추가했으면 ADW 를 줄여 총량을 맞추세요.</p>`;
+}
+function mixHTML(stepId, r){
+  const m = MIXES[stepId]; if(!m) return "";
+  const mix = mixOf(r);
+  const rows = m.rows.map(([n, d]) => `<tr>
+    <td>${esc(n)}</td>
+    <td class="mixdef">${esc(d)}</td>
+    <td><input type="text" inputmode="decimal" value="${esc(mix.vals[n] || "")}" placeholder="${esc(d)}" data-act="mix" data-f="${esc(n)}"></td>
+    <td></td></tr>`).join("");
+  const extra = (mix.extra || []).map(x => `<tr>
+    <td><input type="text" value="${esc(x.name)}" placeholder="추가 시약" data-act="mixx" data-id="${x.id}" data-f="name"></td>
+    <td class="mixdef">—</td>
+    <td><input type="text" inputmode="decimal" value="${esc(x.amount)}" placeholder="0" data-act="mixx" data-id="${x.id}" data-f="amount"></td>
+    <td><button class="x" data-act="mixdel" data-id="${x.id}" title="삭제">×</button></td></tr>`).join("");
+  return `<div class="field">
+    <div class="frow"><label>조성 기록 <span class="cu">${esc(m.title)}</span></label>
+      <span class="btnpair">
+        <button class="toggle" data-act="mixfill">기본값 채우기</button>
+        <button class="toggle" data-act="mixadd">＋ 시약</button>
+      </span></div>
+    <table class="rt mixt">
+      <thead><tr><th>성분</th><th>기본</th><th>이번 실험</th><th></th></tr></thead>
+      <tbody>${rows}${extra}</tbody></table>
+    <div id="mixsum">${mixSumHTML(stepId, r)}</div>
+  </div>`;
+}
+function updateMixSum(){
+  const el = document.getElementById("mixsum");
+  if(el) el.innerHTML = mixSumHTML(ui.step, runOf(ui.step));
+}
+
 /* ══ 타이머 ══
    초 단위 표시는 화면에서만 굴리고, 저장은 시작·정지 같은 조작이 있을 때만 한다.
    startedAt(시각)을 저장하므로 앱을 닫았다 열어도 시간이 이어진다. */
@@ -2135,6 +2211,7 @@ function viewFlow(){
         <div class="field"><span class="flabel">상태</span><div class="chips">${statusChips(ui.step, r.status)}</div></div>
         <div class="field"><label for="dt">실험 날짜</label>
           <input id="dt" type="date" value="${esc(r.date)}" data-act="date"></div>
+        ${mixHTML(ui.step, r)}
         <div class="field"><label for="rs">결과 기록</label>
           <textarea id="rs" rows="6" placeholder="농도, 밴드 크기, OD값, gel 결과, 조건 변경 등 자유롭게 기록" data-act="result">${esc(r.result)}</textarea></div>
         <div class="field"><span class="flabel">결과 사진</span>
@@ -2294,6 +2371,20 @@ document.getElementById("app").addEventListener("click", e => {
   else if(a === "here"){ S.current = S.current === id ? null : id; save(); render(); }
   else if(a === "status"){ patchRun(ui.step, runOf(ui.step).id, { status:b.dataset.v }); }
   else if(a === "toggleproto"){ ui.showProto = !ui.showProto; render(); }
+  else if(a === "mixadd"){
+    const r = runOf(ui.step), mx = mixOf(r);
+    mx.extra = (mx.extra || []).concat({ id:"m"+Date.now(), name:"", amount:"" });
+    save(); render();
+  }
+  else if(a === "mixdel"){
+    const r = runOf(ui.step), mx = mixOf(r);
+    mx.extra = (mx.extra || []).filter(x => x.id !== id);
+    save(); render();
+  }
+  else if(a === "mixfill"){
+    const r = runOf(ui.step), mx = mixOf(r), m = MIXES[ui.step];
+    if(m){ m.rows.forEach(([n, d]) => { if(!mx.vals[n]) mx.vals[n] = d; }); save(); render(); }
+  }
   else if(a === "addtr"){
     const r = runOf(ui.step);
     patchRun(ui.step, r.id, { trouble:[...(r.trouble || []), { id:Date.now(), date:"", problem:"", cause:"", fix:"" }] });
@@ -2455,6 +2546,15 @@ document.getElementById("app").addEventListener("input", e => {
     save(); updateCalc();
   }
   else if(a === "ed-mats"){ ui.editor.mats = t.value; updatePreview(); }
+  else if(a === "mix"){
+    mixOf(runOf(ui.step)).vals[t.dataset.f] = t.value;
+    save(); updateMixSum();
+  }
+  else if(a === "mixx"){
+    const mx = mixOf(runOf(ui.step));
+    const row = (mx.extra || []).find(x => x.id === t.dataset.id);
+    if(row){ row[t.dataset.f] = t.value; save(); updateMixSum(); }
+  }
   else if(a === "dil"){
     const f = t.dataset.f;
     D()[f] = t.value;
