@@ -224,6 +224,7 @@ select{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);b
 .mixt input{width:100%;min-height:40px;font-size:15px;background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:0 9px;font-variant-numeric:tabular-nums}
 .mixt td:last-child{width:38px;padding:0}
 .mixt .x{width:34px;height:34px;font-size:18px;color:var(--ink-soft);background:none;border:none;border-radius:8px}
+.kbox{min-height:var(--tap);display:flex;align-items:center;padding:0 12px;font-family:var(--mono);font-size:15px;background:var(--card);border:1px solid var(--line);border-radius:9px}
 .mixsum{margin:11px 0 0;font-family:var(--mono);font-size:13px;font-weight:600;color:var(--st-done)}
 .mixsum.off{color:var(--st-fail)}
 .runbox{border:1px solid var(--line);border-radius:11px;margin-bottom:10px;overflow:hidden;background:var(--paper)}
@@ -287,6 +288,7 @@ select{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);b
 </header>
 
 <main id="app">불러오는 중…</main>
+<datalist id="enzymes"></datalist>
 
 <script>
 /* ══ 프로토콜 데이터 ══ */
@@ -316,6 +318,7 @@ const PHASES = [
           "부피가 큰 순서대로 PCR tube에 넣기",
           "(ADW를 제외한 시약은 사용 전 pipetting — 절반 이상의 볼륨으로)",
           "(polymerase는 glycerol이 들어 있어 천천히 pipetting)",
+          "★ polymerase는 꺼내 두지 말고 아이스박스에 박아둔 채로 꺼내 쓴다. 상온에 두면 활성이 떨어진다.",
           "(벽면에 시약이 많이 붙었으면 spin down 5~10초)",
           "[PCR machine]",
           "machine에 PCR tube 넣고 shift로 A / B 선택",
@@ -326,7 +329,7 @@ const PHASES = [
           "[전기영동]",
           "PCR 시간이 얼마 안 남았을 때 ladder(100bp plus marker), dye(purple dye, 냉동실), pipette, parafilm, 잘라놓은 gel을 미리 준비",
           "parafilm에 dye 1µl를 올리고 PCR product 5µl를 pipetting으로 혼합",
-          "gel을 기계 위에 올리고 ladder → 시료 순서로 well에 loading",
+          "gel을 기계 위에 올리고 ladder(7µl) → 시료 순서로 well에 loading",
           "(ladder도 pipetting 후 넣기)",
           "gel을 홈 사이에 맞추고 전원을 켜서 run — 50V, 60min",
         ],
@@ -1970,12 +1973,32 @@ const MIXES = {
     { n:"primer f", d:"0.3" }, { n:"primer r", d:"0.3" },
     { n:"mastermix", d:"2.5" }, { n:"ADW", d:"1.9" }] },
   re:   { title:"총 20 µl · 같은 buffer 기준", unit:"µl", total:20, rows:[
-    { n:"buffer", d:"2" }, { n:"R.E #1", d:"0.5" }, { n:"R.E #2", d:"0.5" },
+    { n:"buffer", d:"2" },
+    { n:"R.E #1", d:"0.5", edit:"효소 이름", list:"enzymes" },
+    { n:"R.E #2", d:"0.5", edit:"효소 이름", list:"enzymes" },
     { n:"target DNA", d:"17" }] },
 };
+MIXES.cpcr.scale = true;   // colony 수 + 2 로 넉넉히 만든다
+const ENZYMES = ["NdeI","XhoI","EcoRI","BamHI","HindIII","NcoI","SalI","NotI","XbaI","KpnI","SacI","PstI","BglII","SpeI"];
+/* target 정보를 적는 단계 */
+const TARGET_STEPS = ["pcr"];
+function targetHTML(stepId, r){
+  if(!TARGET_STEPS.includes(stepId)) return "";
+  const g = r.target || {};
+  const f = (k, label, ph, unit) => `<div><label for="tg_${k}">${label}${unit?` <span class="cu">${unit}</span>`:""}</label>
+    <input id="tg_${k}" type="text" value="${esc(g[k] || "")}" placeholder="${esc(ph)}" data-act="target" data-f="${k}"></div>`;
+  return `<div class="field">
+    <span class="flabel">Target 정보</span>
+    <div class="tgrid3">
+      ${f("name","이름","예: YbfF")}
+      ${f("bp","길이","1200","bp")}
+      ${f("gc","GC content","52","%")}
+    </div>
+  </div>`;
+}
 function mixOf(r){
   const mx = (r.mix = r.mix || { vals:{}, extra:[] });
-  mx.vals = mx.vals || {}; mx.extra = mx.extra || []; mx.picks = mx.picks || {};
+  mx.vals = mx.vals || {}; mx.extra = mx.extra || []; mx.picks = mx.picks || {}; mx.names = mx.names || {};
   if(mx.vals["5X HF buffer"] !== undefined && mx.vals.buffer === undefined){   // 예전 행 이름 이전
     mx.vals.buffer = mx.vals["5X HF buffer"];
     delete mx.vals["5X HF buffer"];
@@ -2014,9 +2037,12 @@ function mixHTML(stepId, r){
     const label = row.pick
       ? `<select data-act="mixpick" data-f="${esc(n)}">${row.pick.map(o =>
           `<option${(mix.picks[n] || row.pick[0]) === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`
-      : esc(n);
+      : row.edit
+        ? `<input type="text" value="${esc((mix.names || {})[n] || "")}" placeholder="${esc(row.edit)}"
+             ${row.list?`list="${esc(row.list)}"`:""} data-act="mixname" data-f="${esc(n)}">`
+        : esc(n);
     return `<tr>
-      <td class="${row.pick?"mixpick":""}">${label}</td>
+      <td class="${(row.pick||row.edit)?"mixpick":""}">${label}</td>
       <td class="mixdef">${esc(d)}</td>
       <td><input type="text" inputmode="decimal" value="${esc(mix.vals[n] || "")}" placeholder="${esc(d)}" data-act="mix" data-f="${esc(n)}"></td>
       <td></td></tr>`;
@@ -2036,6 +2062,39 @@ function mixHTML(stepId, r){
       <thead><tr><th>성분</th><th>기본</th><th>이번 실험</th><th></th></tr></thead>
       <tbody>${rows}${extra}</tbody></table>
     <div id="mixsum">${mixSumHTML(stepId, r)}</div>
+  </div>`;
+}
+function scaleHTML(stepId, r){
+  const m = MIXES[stepId];
+  if(!m || !m.scale) return "";
+  const mix = mixOf(r);
+  const n = parseInt(r.nColony, 10);
+  const k = isFinite(n) && n > 0 ? n + 2 : null;
+  const amt = row => {
+    const v = mix.vals[row.n];
+    return parseFloat((v !== undefined && String(v).trim() !== "") ? v : row.d);
+  };
+  const rows = m.rows.map(row => {
+    const a = amt(row);
+    return `<tr><td>${esc((mix.names || {})[row.n] || row.n)}</td>
+      <td class="mixdef">${isFinite(a) ? a : "—"}</td>
+      <td class="mixdef">${k && isFinite(a) ? +(a * k).toFixed(2) : "—"}</td></tr>`;
+  }).join("");
+  const per = m.rows.reduce((t2, row) => t2 + (isFinite(amt(row)) ? amt(row) : 0), 0);
+  return `<div class="field">
+    <div class="frow"><label>제조량 계산 <span class="cu">colony 수 + 2</span></label></div>
+    <div class="tgrid3">
+      <div><label for="ncol">colony 수</label>
+        <input id="ncol" type="text" inputmode="numeric" value="${esc(r.nColony || "")}" placeholder="예: 8" data-act="ncol"></div>
+      <div><label>계산 배수</label><div class="kbox">${k ? k + " ×" : "—"}</div></div>
+      <div><label>만들 총량</label><div class="kbox">${k ? +(per * k).toFixed(2) + " " + m.unit : "—"}</div></div>
+    </div>
+    <table class="rt mixt" style="margin-top:12px">
+      <thead><tr><th>성분</th><th>1개당</th><th>×${k || "n+2"}</th></tr></thead>
+      <tbody>${rows}
+        <tr><td><b>합계</b></td><td class="mixdef">${+per.toFixed(2)}</td>
+          <td class="mixdef">${k ? +(per * k).toFixed(2) : "—"}</td></tr></tbody></table>
+    <p class="stat">tube 벽면과 팁에 남는 양을 감안해 colony 수보다 2회분 넉넉히 만듭니다.</p>
   </div>`;
 }
 function updateMixSum(){
@@ -2232,7 +2291,9 @@ function viewFlow(){
         <div class="field"><span class="flabel">상태</span><div class="chips">${statusChips(ui.step, r.status)}</div></div>
         <div class="field"><label for="dt">실험 날짜</label>
           <input id="dt" type="date" value="${esc(r.date)}" data-act="date"></div>
+        ${targetHTML(ui.step, r)}
         ${mixHTML(ui.step, r)}
+        ${scaleHTML(ui.step, r)}
         <div class="field"><label for="rs">결과 기록</label>
           <textarea id="rs" rows="6" placeholder="농도, 밴드 크기, OD값, gel 결과, 조건 변경 등 자유롭게 기록" data-act="result">${esc(r.result)}</textarea></div>
         <div class="field"><span class="flabel">결과 사진</span>
@@ -2567,6 +2628,18 @@ document.getElementById("app").addEventListener("input", e => {
     save(); updateCalc();
   }
   else if(a === "ed-mats"){ ui.editor.mats = t.value; updatePreview(); }
+  else if(a === "target"){
+    const r = runOf(ui.step);
+    r.target = { ...(r.target || {}), [t.dataset.f]:t.value };
+    save();
+  }
+  else if(a === "ncol"){
+    const r = runOf(ui.step);
+    r.nColony = t.value; save(); render();
+  }
+  else if(a === "mixname"){
+    mixOf(runOf(ui.step)).names[t.dataset.f] = t.value; save();
+  }
   else if(a === "mix"){
     mixOf(runOf(ui.step)).vals[t.dataset.f] = t.value;
     save(); updateMixSum();
@@ -2801,6 +2874,8 @@ document.getElementById("hdtimer").addEventListener("click", () => {
 
 document.addEventListener("visibilitychange", () => { if(!document.hidden) syncNow(true); });
 window.addEventListener("focus", () => syncNow(true));
+
+document.getElementById("enzymes").innerHTML = ENZYMES.map(e => `<option value="${e}">`).join("");
 
 /* ══ 시작 ══ */
 (async () => {
