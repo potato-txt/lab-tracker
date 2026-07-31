@@ -219,6 +219,8 @@ select{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);b
 .mixt td{padding:6px 8px}
 .mixt td:first-child{white-space:nowrap}
 .mixt .mixdef{font-family:var(--mono);font-size:13px;color:var(--ink-soft);white-space:nowrap}
+.mixt select{width:100%;min-height:40px;font:inherit;font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:7px;padding:0 7px}
+.mixt td.mixpick{white-space:normal;min-width:140px}
 .mixt input{width:100%;min-height:40px;font-size:15px;background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:0 9px;font-variant-numeric:tabular-nums}
 .mixt td:last-child{width:38px;padding:0}
 .mixt .x{width:34px;height:34px;font-size:18px;color:var(--ink-soft);background:none;border:none;border-radius:8px}
@@ -1960,21 +1962,33 @@ function updateDilOut(){
    빈 칸은 기본값대로 넣은 것으로 보고 합계에 반영한다. */
 const MIXES = {
   pcr:  { title:"총 25 µl 고정", unit:"µl", total:25, rows:[
-    ["ADW","17.6"], ["5X HF buffer","5"], ["template DNA","1"], ["dNTPs","0.5"],
-    ["primer f","0.3"], ["primer r","0.3"], ["polymerase","0.3"]] },
+    { n:"ADW", d:"17.6" },
+    { n:"buffer", d:"5", pick:["5X HF buffer","5X GC buffer"] },
+    { n:"template DNA", d:"1" }, { n:"dNTPs", d:"0.5" },
+    { n:"primer f", d:"0.3" }, { n:"primer r", d:"0.3" }, { n:"polymerase", d:"0.3" }] },
   cpcr: { title:"colony 1개당 5 µl", unit:"µl", total:5, rows:[
-    ["primer f","0.3"], ["primer r","0.3"], ["mastermix","2.5"], ["ADW","1.9"]] },
+    { n:"primer f", d:"0.3" }, { n:"primer r", d:"0.3" },
+    { n:"mastermix", d:"2.5" }, { n:"ADW", d:"1.9" }] },
   re:   { title:"총 20 µl · 같은 buffer 기준", unit:"µl", total:20, rows:[
-    ["buffer","2"], ["R.E #1","0.5"], ["R.E #2","0.5"], ["target DNA","17"]] },
+    { n:"buffer", d:"2" }, { n:"R.E #1", d:"0.5" }, { n:"R.E #2", d:"0.5" },
+    { n:"target DNA", d:"17" }] },
 };
-function mixOf(r){ return (r.mix = r.mix || { vals:{}, extra:[] }); }
+function mixOf(r){
+  const mx = (r.mix = r.mix || { vals:{}, extra:[] });
+  mx.vals = mx.vals || {}; mx.extra = mx.extra || []; mx.picks = mx.picks || {};
+  if(mx.vals["5X HF buffer"] !== undefined && mx.vals.buffer === undefined){   // 예전 행 이름 이전
+    mx.vals.buffer = mx.vals["5X HF buffer"];
+    delete mx.vals["5X HF buffer"];
+  }
+  return mx;
+}
 function mixSum(stepId, r){
   const m = MIXES[stepId]; if(!m) return null;
   const mix = mixOf(r);
   let sum = 0, filled = false;
-  m.rows.forEach(([n, d]) => {
-    const v = mix.vals[n];
-    const used = (v !== undefined && String(v).trim() !== "") ? v : d;
+  m.rows.forEach(row => {
+    const v = mix.vals[row.n];
+    const used = (v !== undefined && String(v).trim() !== "") ? v : row.d;
     if(v !== undefined && String(v).trim() !== "") filled = true;
     const x = parseFloat(used); if(isFinite(x)) sum += x;
   });
@@ -1995,11 +2009,18 @@ function mixSumHTML(stepId, r){
 function mixHTML(stepId, r){
   const m = MIXES[stepId]; if(!m) return "";
   const mix = mixOf(r);
-  const rows = m.rows.map(([n, d]) => `<tr>
-    <td>${esc(n)}</td>
-    <td class="mixdef">${esc(d)}</td>
-    <td><input type="text" inputmode="decimal" value="${esc(mix.vals[n] || "")}" placeholder="${esc(d)}" data-act="mix" data-f="${esc(n)}"></td>
-    <td></td></tr>`).join("");
+  const rows = m.rows.map(row => {
+    const n = row.n, d = row.d;
+    const label = row.pick
+      ? `<select data-act="mixpick" data-f="${esc(n)}">${row.pick.map(o =>
+          `<option${(mix.picks[n] || row.pick[0]) === o ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`
+      : esc(n);
+    return `<tr>
+      <td class="${row.pick?"mixpick":""}">${label}</td>
+      <td class="mixdef">${esc(d)}</td>
+      <td><input type="text" inputmode="decimal" value="${esc(mix.vals[n] || "")}" placeholder="${esc(d)}" data-act="mix" data-f="${esc(n)}"></td>
+      <td></td></tr>`;
+  }).join("");
   const extra = (mix.extra || []).map(x => `<tr>
     <td><input type="text" value="${esc(x.name)}" placeholder="추가 시약" data-act="mixx" data-id="${x.id}" data-f="name"></td>
     <td class="mixdef">—</td>
@@ -2383,7 +2404,7 @@ document.getElementById("app").addEventListener("click", e => {
   }
   else if(a === "mixfill"){
     const r = runOf(ui.step), mx = mixOf(r), m = MIXES[ui.step];
-    if(m){ m.rows.forEach(([n, d]) => { if(!mx.vals[n]) mx.vals[n] = d; }); save(); render(); }
+    if(m){ m.rows.forEach(row => { if(!mx.vals[row.n]) mx.vals[row.n] = row.d; }); save(); render(); }
   }
   else if(a === "addtr"){
     const r = runOf(ui.step);
@@ -2590,6 +2611,10 @@ document.getElementById("app").addEventListener("input", e => {
 });
 
 document.getElementById("app").addEventListener("change", e => {
+  if(e.target.dataset.act === "mixpick"){
+    mixOf(runOf(ui.step)).picks[e.target.dataset.f] = e.target.value;
+    save(); return;
+  }
   if(e.target.dataset.act === "dil"){
     D()[e.target.dataset.f] = e.target.value; save(); updateDilOut(); return;
   }
