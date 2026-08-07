@@ -97,6 +97,7 @@ main{padding:16px 16px calc(28px + var(--bot));max-width:1400px;margin:0 auto;}
 .dphase{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.05em}
 .detail h2{margin:8px 0 5px;font-size:22px;font-weight:640}
 .dnote{margin:0;font-size:14px;color:var(--ink-soft)}
+.tspan{display:inline-block;margin:9px 0 0;padding:5px 11px;font-family:var(--mono);font-size:12px;color:var(--accent);background:#eef3f1;border-radius:16px}
 .herebtn{min-height:var(--tap);padding:0 16px;font-size:13.5px;font-weight:600;color:var(--st-run);background:none;border:1px solid var(--st-run);border-radius:23px}
 .herebtn.on{background:var(--st-run);color:#fff}
 .delbtn{min-height:var(--tap);padding:0 16px;font-size:13.5px;color:var(--st-fail);background:none;border:1px solid var(--line);border-radius:23px}
@@ -289,6 +290,7 @@ select{width:100%;min-height:var(--tap);font-size:16px;background:var(--paper);b
 
 <main id="app">불러오는 중…</main>
 <datalist id="enzymes"></datalist>
+<datalist id="buffers"></datalist>
 
 <script>
 /* ══ 프로토콜 데이터 ══ */
@@ -301,6 +303,7 @@ const PHASES = [
         id: "pcr",
         name: "PCR",
         note: "target DNA 증폭 → 전기영동으로 밴드 확인",
+        time: "약 3시간 (반응 준비 20분 · PCR 1.5~2시간 · 전기영동 1시간)",
         protocol: [
           "[재료]",
           "- ADW, buffer (target의 GC content에 따라 HF / GC buffer 선택), primer(f/r), template DNA, dNTPs, polymerase",
@@ -338,6 +341,7 @@ const PHASES = [
         id: "cu1",
         name: "PCR clean up",
         note: "PCR product 정제 · ADW 50µl elution",
+        time: "약 20분",
         protocol: [
           "[재료]",
           "- PCR purification kit (선반) — 키트 내 동봉 프로토콜 참조",
@@ -361,6 +365,7 @@ const PHASES = [
         id: "re",
         name: "Restriction Enzyme cut",
         note: "insert · vector 제한효소 절단 · 2h incubation",
+        time: "약 2시간 20분 (준비 20분 · incubation 2시간)",
         protocol: [
           "[재료]",
           "- insert DNA, R.E (작은 icebox), buffer, vector",
@@ -381,6 +386,7 @@ const PHASES = [
         id: "cu2",
         name: "PCR clean up (cut 후)",
         note: "절단 산물 정제 · ADW 20µl elution",
+        time: "약 20분",
         protocol: [
           "PCR clean up과 모든 단계가 동일하다",
           "★ 단 한 가지 차이 — elution을 ADW 20µl로 한다 (일반 clean up은 50µl)",
@@ -397,6 +403,7 @@ const PHASES = [
         id: "lig",
         name: "Ligation",
         note: "insert + vector 연결 · 23℃ 4h",
+        time: "약 4시간 30분 (나노드랍 20분 · incubation 4시간)",
         protocol: [
           "[재료]",
           "- ligase, ligation buffer (T4 DNA ligase buffer, 작은 icebox), vector, target DNA, ADW(blank)",
@@ -428,6 +435,7 @@ const PHASES = [
         id: "tf1",
         name: "Transformation – cloning host",
         note: "E. coli TOP10 형질전환 → 도말 → overnight",
+        time: "약 2시간 + overnight 16~20시간",
         protocol: [
           "> 적용 대상: ligation product, 또는 증폭·보존이 필요한 plasmid/vector.",
           "[준비]",
@@ -461,6 +469,7 @@ const PHASES = [
         id: "cpcr",
         name: "Colony PCR",
         note: "insert 삽입 확인 · touchdown PCR → 전기영동",
+        time: "약 3시간 (준비 30분 · PCR 1.5시간 · 전기영동 1시간)",
         protocol: [
           "[재료]",
           "- iTaq polymerase, mastermix (냉장고 — 꺼낸 뒤에는 ice 보관), primer, ADW, PCR tube(오른쪽 선반), PCR rack",
@@ -490,6 +499,7 @@ const PHASES = [
         id: "seed",
         name: "Seeding",
         note: "양성 colony → LB 10ml → overnight",
+        time: "약 20분 + overnight",
         protocol: [
           "[재료]",
           "- conical tube, LB배지 (일반적으로 10ml), colony, 10µl pipette, kan",
@@ -508,6 +518,7 @@ const PHASES = [
         id: "prep_p",
         name: "Plasmid prep",
         note: "plasmid 추출 → sequencing 의뢰",
+        time: "약 1시간 (sequencing 결과는 1~2일 뒤)",
         protocol: [
           "[재료]",
           "- kit 내에 동봉된 프로토콜 참조",
@@ -545,6 +556,7 @@ const PHASES = [
         id: "tf2",
         name: "Transformation – expression host",
         note: "sequencing 검증 → BL21*pLysS 형질전환",
+        time: "약 2시간 + overnight 16~20시간",
         protocol: [
           "[sequencing 결과 확인]",
           "마크로젠 사이트 접속 → 결과 → CES → 결과보기",
@@ -586,6 +598,7 @@ const PHASES = [
         id: "stock",
         name: "cell stock seeding (20ml)",
         note: "20ml 전배양 → 1L bulk → OD 0.4~0.6 → IPTG → harvest",
+        time: "이틀 (전배양 overnight · 본배양 2시간 · 유도 20시간 · harvest 40분)",
         protocol: [
           "- 20ml에 seeding해서 어느 정도 키운 후 LB배지 1L에 넣어 O.D값이 0.4~0.6인지 측정한다",
           "[Seeding — 20ml]",
@@ -632,6 +645,7 @@ const PHASES = [
         id: "lysis",
         name: "Cell lysis",
         note: "buffer 준비 → sonication → centrifuge 2h",
+        time: "약 3시간 (버퍼·sonication 1시간 · centrifuge 2시간)",
         protocol: [
           "[버퍼 준비]",
           "- His A (기본): NaCl 500mM / Glycerol 10% / Tris-HCl 20mM / pH 8.0",
@@ -669,6 +683,7 @@ const PHASES = [
         id: "sds",
         name: "SDS-PAGE",
         note: "gel 제작 → 전기영동 → staining / destaining",
+        time: "약 5시간 + destaining overnight",
         protocol: [
           "[Gel 제작 — 재료]",
           "- 냉장고: stacking gel buffer, separating buffer, a.a solution",
@@ -1637,7 +1652,7 @@ async function importDoc(file){
   try{
     const lines = autoFormat(await readDoc(file));
     if(!lines.length) throw new Error("문서에서 글자를 찾지 못했습니다");
-    const ed = ui.editor || { kind:"step", id:null, phase:PHASES[0].id, name:"", note:"", mats:"", text:"" };
+    const ed = ui.editor || { kind:"step", id:null, phase:PHASES[0].id, name:"", note:"", time:"", mats:"", text:"" };
     const sp = splitProtocol(lines);
     const join = (a, b) => (a && a.trim() ? a.trim() + "\n" + b : b);           // 내용이 있으면 뒤에 붙인다
     if(sp.mats.length) ed.mats = join(ed.mats, sp.mats.join("\n"));
@@ -1752,7 +1767,9 @@ function editorView(){
     <div class="field"><label for="ednm">${prep?"항목 이름":"단계 이름"}</label>
       <input id="ednm" type="text" value="${esc(e.name)}" placeholder="${prep?"예: 1X TAE buffer":"예: Western blot"}" data-act="ed-name"></div>
     ${prep ? "" : `<div class="field"><label for="ednt">한 줄 설명</label>
-      <input id="ednt" type="text" value="${esc(e.note)}" placeholder="예: 항체 반응 → 발색" data-act="ed-note"></div>`}
+      <input id="ednt" type="text" value="${esc(e.note)}" placeholder="예: 항체 반응 → 발색" data-act="ed-note"></div>
+    <div class="field"><label for="edtm">예상 소요 시간 <span class="cu">선택</span></label>
+      <input id="edtm" type="text" value="${esc(e.time || "")}" placeholder="예: 약 2시간 + overnight" data-act="ed-time"></div>`}
     <div class="field"><label for="edph">어느 묶음에 넣을까요</label>
       <select id="edph" data-act="ed-phase">${opts}</select></div>
 
@@ -1972,14 +1989,32 @@ const MIXES = {
   cpcr: { title:"colony 1개당 5 µl", unit:"µl", total:5, rows:[
     { n:"primer f", d:"0.3" }, { n:"primer r", d:"0.3" },
     { n:"mastermix", d:"2.5" }, { n:"ADW", d:"1.9" }] },
-  re:   { title:"총 20 µl · 같은 buffer 기준", unit:"µl", total:20, rows:[
-    { n:"buffer", d:"2" },
-    { n:"R.E #1", d:"0.5", edit:"효소 이름", list:"enzymes" },
-    { n:"R.E #2", d:"0.5", edit:"효소 이름", list:"enzymes" },
-    { n:"target DNA", d:"17" }] },
+  re:   { title:"총 20 µl", unit:"µl", modes:[
+    { id:"same", label:"같은 buffer", total:20, rows:[
+      { n:"buffer", d:"2", edit:"buffer 이름", list:"buffers" },
+      { n:"R.E #1", d:"0.5", edit:"효소 이름", list:"enzymes" },
+      { n:"R.E #2", d:"0.5", edit:"효소 이름", list:"enzymes" },
+      { n:"target DNA", d:"17" }] },
+    { id:"diff", label:"다른 buffer", total:20, rows:[
+      { n:"buffer #1", d:"2", edit:"buffer 이름", list:"buffers" },
+      { n:"buffer #2", d:"2", edit:"buffer 이름", list:"buffers" },
+      { n:"R.E #1", d:"0.5", edit:"효소 이름", list:"enzymes" },
+      { n:"R.E #2", d:"0.5", edit:"효소 이름", list:"enzymes" },
+      { n:"target DNA", d:"15" }] },
+  ] },
 };
 MIXES.cpcr.scale = true;   // colony 수 + 2 로 넉넉히 만든다
 const ENZYMES = ["NdeI","XhoI","EcoRI","BamHI","HindIII","NcoI","SalI","NotI","XbaI","KpnI","SacI","PstI","BglII","SpeI"];
+const BUFFERS = ["rCutSmart Buffer","NEBuffer r1.1","NEBuffer r2.1","NEBuffer r3.1","Buffer Tango","FastDigest Green Buffer"];
+/* 방식(같은/다른 buffer)에 따라 조성표가 달라진다 */
+function mixDef(stepId, r){
+  const m = MIXES[stepId];
+  if(!m) return null;
+  if(!m.modes) return m;
+  const id = (r && r.mixMode) || m.modes[0].id;
+  const v = m.modes.find(x => x.id === id) || m.modes[0];
+  return { ...m, ...v, modes:m.modes, cur:v.id };
+}
 /* target 정보를 적는 단계 */
 const TARGET_STEPS = ["pcr"];
 function targetHTML(stepId, r){
@@ -2006,7 +2041,7 @@ function mixOf(r){
   return mx;
 }
 function mixSum(stepId, r){
-  const m = MIXES[stepId]; if(!m) return null;
+  const m = mixDef(stepId, r); if(!m) return null;
   const mix = mixOf(r);
   let sum = 0, filled = false;
   m.rows.forEach(row => {
@@ -2021,7 +2056,7 @@ function mixSum(stepId, r){
   return { sum, filled };
 }
 function mixSumHTML(stepId, r){
-  const m = MIXES[stepId], res = mixSum(stepId, r);
+  const m = mixDef(stepId, r), res = mixSum(stepId, r);
   if(!res) return "";
   const diff = res.sum - m.total;
   const off = Math.abs(diff) > 0.05;
@@ -2030,7 +2065,7 @@ function mixSumHTML(stepId, r){
     <p class="stat">빈 칸은 기본값대로 넣은 것으로 계산합니다. 시약을 추가했으면 ADW 를 줄여 총량을 맞추세요.</p>`;
 }
 function mixHTML(stepId, r){
-  const m = MIXES[stepId]; if(!m) return "";
+  const m = mixDef(stepId, r); if(!m) return "";
   const mix = mixOf(r);
   const rows = m.rows.map(row => {
     const n = row.n, d = row.d;
@@ -2052,12 +2087,15 @@ function mixHTML(stepId, r){
     <td class="mixdef">—</td>
     <td><input type="text" inputmode="decimal" value="${esc(x.amount)}" placeholder="0" data-act="mixx" data-id="${x.id}" data-f="amount"></td>
     <td><button class="x" data-act="mixdel" data-id="${x.id}" title="삭제">×</button></td></tr>`).join("");
+  const modeChips = m.modes ? `<div class="chips" style="margin-bottom:12px">${m.modes.map(v =>
+    `<button class="chip ${m.cur===v.id?"on":""}" data-act="mixmode" data-id="${v.id}">${esc(v.label)}</button>`).join("")}</div>` : "";
   return `<div class="field">
-    <div class="frow"><label>조성 기록 <span class="cu">${esc(m.title)}</span></label>
+    <div class="frow"><label>조성 기록 <span class="cu">${esc(m.title)}${m.modes?" · "+esc(m.modes.find(v=>v.id===m.cur).label):""}</span></label>
       <span class="btnpair">
         <button class="toggle" data-act="mixfill">기본값 채우기</button>
         <button class="toggle" data-act="mixadd">＋ 시약</button>
       </span></div>
+    ${modeChips}
     <table class="rt mixt">
       <thead><tr><th>성분</th><th>기본</th><th>이번 실험</th><th></th></tr></thead>
       <tbody>${rows}${extra}</tbody></table>
@@ -2065,7 +2103,7 @@ function mixHTML(stepId, r){
   </div>`;
 }
 function scaleHTML(stepId, r){
-  const m = MIXES[stepId];
+  const m = mixDef(stepId, r);
   if(!m || !m.scale) return "";
   const mix = mixOf(r);
   const n = parseInt(r.nColony, 10);
@@ -2327,6 +2365,7 @@ function viewFlow(){
           <button class="herebtn ${S.current===st.id?"on":""}" data-act="here" data-id="${st.id}">${S.current===st.id?"✓ 진행 중으로 표시됨":"지금 여기 진행 중"}</button>
         </div></div>
       <h2>${esc(st.name)}</h2><p class="dnote">${esc(st.note)}</p>
+      ${st.time?`<p class="tspan">⏱ ${esc(st.time)}</p>`:""}
     </div>
     <div class="field"><div class="frow"><label>실험 방법</label>
       <button class="toggle" data-act="toggleproto">${ui.showProto?"접기 ▲":"펼치기 ▼"}</button></div>${proto}</div>
@@ -2453,6 +2492,7 @@ document.getElementById("app").addEventListener("click", e => {
   else if(a === "here"){ S.current = S.current === id ? null : id; save(); render(); }
   else if(a === "status"){ patchRun(ui.step, runOf(ui.step).id, { status:b.dataset.v }); }
   else if(a === "toggleproto"){ ui.showProto = !ui.showProto; render(); }
+  else if(a === "mixmode"){ runOf(ui.step).mixMode = id; save(); render(); }
   else if(a === "mixadd"){
     const r = runOf(ui.step), mx = mixOf(r);
     mx.extra = (mx.extra || []).concat({ id:"m"+Date.now(), name:"", amount:"" });
@@ -2464,7 +2504,7 @@ document.getElementById("app").addEventListener("click", e => {
     save(); render();
   }
   else if(a === "mixfill"){
-    const r = runOf(ui.step), mx = mixOf(r), m = MIXES[ui.step];
+    const r = runOf(ui.step), mx = mixOf(r), m = mixDef(ui.step, r);
     if(m){ m.rows.forEach(row => { if(!mx.vals[row.n]) mx.vals[row.n] = row.d; }); save(); render(); }
   }
   else if(a === "addtr"){
@@ -2520,12 +2560,12 @@ document.getElementById("app").addEventListener("click", e => {
     save(); render();
   }
   else if(a === "calc-reset"){ S.calc = { ...CALC_DEF }; save(); render(); }
-  else if(a === "ed-new"){ ui.editor = { kind:"step", id:null, phase:PHASES[0].id, name:"", note:"", mats:"", text:"" }; ui.impErr = ""; render(); window.scrollTo(0,0); }
+  else if(a === "ed-new"){ ui.editor = { kind:"step", id:null, phase:PHASES[0].id, name:"", note:"", time:"", mats:"", text:"" }; ui.impErr = ""; render(); window.scrollTo(0,0); }
   else if(a === "ed-edit"){
     const c = S.customSteps.find(x => x.id === id);
     if(c){
       const sp = splitProtocol(c.protocol || []);
-      ui.editor = { kind:"step", id:c.id, phase:c.phase, name:c.name, note:c.note, mats:sp.mats.join("\n"), text:sp.proc.join("\n") };
+      ui.editor = { kind:"step", id:c.id, phase:c.phase, name:c.name, note:c.note, time:c.time || "", mats:sp.mats.join("\n"), text:sp.proc.join("\n") };
       ui.impErr = ""; render(); window.scrollTo(0,0);
     }
   }
@@ -2588,10 +2628,10 @@ document.getElementById("app").addEventListener("click", e => {
     }
     if(ed.id){
       const c = S.customSteps.find(x => x.id === ed.id);
-      Object.assign(c, { phase:ed.phase, name:ed.name.trim(), note:ed.note.trim(), protocol:lines });
+      Object.assign(c, { phase:ed.phase, name:ed.name.trim(), note:ed.note.trim(), time:(ed.time||"").trim(), protocol:lines });
       ui.step = c.id;
     }else{
-      const it = { id:"s"+Date.now(), phase:ed.phase, name:ed.name.trim(), note:ed.note.trim(), protocol:lines };
+      const it = { id:"s"+Date.now(), phase:ed.phase, name:ed.name.trim(), note:ed.note.trim(), time:(ed.time||"").trim(), protocol:lines };
       S.customSteps.push(it);
       S.steps[it.id] = blank();
       ui.step = it.id;
@@ -2622,6 +2662,7 @@ document.getElementById("app").addEventListener("input", e => {
   }
   else if(a === "ed-name"){ ui.editor.name = t.value; }
   else if(a === "ed-note"){ ui.editor.note = t.value; }
+  else if(a === "ed-time"){ ui.editor.time = t.value; }
   else if(a === "ed-text"){ ui.editor.text = t.value; updatePreview(); }
   else if(a === "calc"){
     S.calc = { ...(S.calc || CALC_DEF), [t.dataset.f]:t.value };
@@ -2876,6 +2917,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) syncN
 window.addEventListener("focus", () => syncNow(true));
 
 document.getElementById("enzymes").innerHTML = ENZYMES.map(e => `<option value="${e}">`).join("");
+document.getElementById("buffers").innerHTML = BUFFERS.map(e => `<option value="${e}">`).join("");
 
 /* ══ 시작 ══ */
 (async () => {
