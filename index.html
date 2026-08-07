@@ -1456,8 +1456,8 @@ function ligHTML(){
     </div>
   </div>`;
 }
-function ligOutHTML(){
-  const c = S.calc || CALC_DEF;
+function ligOutHTML(c){
+  c = c || S.calc || CALC_DEF;
   const r = calcLig(c);
   if(!r) return `<p class="picerr" style="margin:14px 0 0">길이·농도·몰비·DNA 부피를 0보다 큰 값으로 넣어 주세요.</p>`;
   const f = (v, d = 2) => v.toFixed(d);
@@ -1486,6 +1486,37 @@ function ligOutHTML(){
       <li><b>DNA 부피 ${f(r.dv)} µl 배분</b><br><span class="cmono">vector : insert = 1 : ${f(r.iUlPer)} → vector ${f(r.Vv)} µl, insert ${f(r.Vi)} µl</span></li>
     </ol></details>
     <p class="stat">Gently pipetting → 16 ℃ O/N 또는 RT 4 h</p>`;
+}
+/* 회차마다 실제로 쓴 계산 조건을 남긴다. 도구 탭 계산기는 계산용 스크래치패드로 따로 둔다. */
+function ligOf(r){ return (r.lig = r.lig || { ...CALC_DEF }); }
+function ligRunHTML(stepId, r){
+  if(TOOLS[stepId] !== "ligation") return "";
+  const c = ligOf(r);
+  const f = (id, label, unit) =>
+    `<div><label for="lr_${id}">${label}${unit?` <span class="cu">${unit}</span>`:""}</label>
+      <input id="lr_${id}" type="text" inputmode="decimal" value="${esc(c[id])}" data-act="ligrun" data-f="${id}"></div>`;
+  return `<div class="field">
+    <div class="frow"><label>Ligation 조건 기록</label>
+      <span class="btnpair">
+        <button class="toggle" data-act="ligpull">계산기 값 가져오기</button>
+        <button class="toggle" data-act="ligreset">기본값</button>
+      </span></div>
+    <div class="calcbox">
+      <p class="csub">Vector</p>
+      <div class="calcgrid">${f("vlen","길이","bp")}${f("vconc","농도","ng/µl")}</div>
+      <p class="csub">Insert</p>
+      <div class="calcgrid">${f("ilen","길이","bp")}${f("iconc","농도","ng/µl")}</div>
+      <p class="csub">반응 조건</p>
+      <div class="calcgrid">${f("ratio","몰비 vector : insert = 1 : n","n")}${f("dna","DNA 부피","µl")}</div>
+      <div class="calcgrid">${f("total","총 반응 부피","µl")}${f("buffer","10X ligase buffer","µl")}</div>
+      <div class="calcgrid">${f("ligase","T4 DNA ligase","µl")}<div></div></div>
+      <div id="ligrunout">${ligOutHTML(c)}</div>
+    </div>
+  </div>`;
+}
+function updateLigRun(){
+  const el = document.getElementById("ligrunout");
+  if(el) el.innerHTML = ligOutHTML(ligOf(runOf(ui.step)));
 }
 function updateCalc(){
   const box = document.getElementById("ligout");
@@ -2332,6 +2363,7 @@ function viewFlow(){
         ${targetHTML(ui.step, r)}
         ${mixHTML(ui.step, r)}
         ${scaleHTML(ui.step, r)}
+        ${ligRunHTML(ui.step, r)}
         <div class="field"><label for="rs">결과 기록</label>
           <textarea id="rs" rows="6" placeholder="농도, 밴드 크기, OD값, gel 결과, 조건 변경 등 자유롭게 기록" data-act="result">${esc(r.result)}</textarea></div>
         <div class="field"><span class="flabel">결과 사진</span>
@@ -2369,7 +2401,6 @@ function viewFlow(){
     </div>
     <div class="field"><div class="frow"><label>실험 방법</label>
       <button class="toggle" data-act="toggleproto">${ui.showProto?"접기 ▲":"펼치기 ▼"}</button></div>${proto}</div>
-    ${TOOLS[st.id] === "ligation" ? ligHTML() : ""}
     <div class="field">
       <div class="frow"><label>시행 기록 · ${e.runs.length}회</label>
         <button class="addbtn" data-act="addrun">＋ 회차 추가</button></div>
@@ -2492,6 +2523,15 @@ document.getElementById("app").addEventListener("click", e => {
   else if(a === "here"){ S.current = S.current === id ? null : id; save(); render(); }
   else if(a === "status"){ patchRun(ui.step, runOf(ui.step).id, { status:b.dataset.v }); }
   else if(a === "toggleproto"){ ui.showProto = !ui.showProto; render(); }
+  else if(a === "ligpull"){
+    const r = runOf(ui.step);
+    r.lig = { ...(S.calc || CALC_DEF) };
+    save(); render();
+  }
+  else if(a === "ligreset"){
+    runOf(ui.step).lig = { ...CALC_DEF };
+    save(); render();
+  }
   else if(a === "mixmode"){ runOf(ui.step).mixMode = id; save(); render(); }
   else if(a === "mixadd"){
     const r = runOf(ui.step), mx = mixOf(r);
@@ -2669,6 +2709,10 @@ document.getElementById("app").addEventListener("input", e => {
     save(); updateCalc();
   }
   else if(a === "ed-mats"){ ui.editor.mats = t.value; updatePreview(); }
+  else if(a === "ligrun"){
+    ligOf(runOf(ui.step))[t.dataset.f] = t.value;
+    save(); updateLigRun();
+  }
   else if(a === "target"){
     const r = runOf(ui.step);
     r.target = { ...(r.target || {}), [t.dataset.f]:t.value };
